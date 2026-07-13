@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智慧補習班 - 刷卡系統</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            color: white;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .left-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 40px;
+            border-right: 1px solid rgba(255,255,255,0.1);
+        }
+        .right-panel {
+            width: 400px;
+            background: rgba(255,255,255,0.03);
+            display: flex;
+            flex-direction: column;
+        }
+        .right-header {
+            padding: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #38bdf8;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.2);
+        }
+        .history-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .history-item {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 4px solid #38bdf8;
+            animation: slideIn 0.3s ease-out;
+        }
+        .history-item.status-in { border-left-color: #4ade80; }
+        .history-item.status-out { border-left-color: #f87171; }
+        
+        .history-info .name { font-weight: 600; font-size: 1.1rem; }
+        .history-info .time { color: #94a3b8; font-size: 0.9rem; margin-top: 4px; }
+        .history-status { font-weight: 800; font-size: 1.1rem; }
+        
+        .school-title {
+            font-size: 1.8rem;
+            color: #94a3b8;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            letter-spacing: 2px;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 2rem;
+            color: #38bdf8;
+            text-shadow: 0 4px 20px rgba(56, 189, 248, 0.4);
+        }
+        
+        /* Live Clock Styles */
+        .clock-container {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .clock-time {
+            font-size: 6rem;
+            font-weight: 800;
+            color: #f8fafc;
+            text-shadow: 0 0 40px rgba(56, 189, 248, 0.6);
+            letter-spacing: 4px;
+            font-variant-numeric: tabular-nums;
+        }
+        .clock-date {
+            font-size: 1.5rem;
+            color: #cbd5e1;
+            margin-top: 0.5rem;
+            font-weight: 600;
+        }
+        
+        .input-container { position: relative; width: 100%; max-width: 600px; }
+        input {
+            width: 100%; padding: 24px; font-size: 2.5rem;
+            border-radius: 20px; border: 2px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05); color: #f8fafc;
+            text-align: center; outline: none; backdrop-filter: blur(10px);
+            transition: all 0.3s ease; letter-spacing: 4px;
+        }
+        input:focus { border-color: #38bdf8; box-shadow: 0 0 30px rgba(56, 189, 248, 0.3); }
+        .instruction { margin-top: 1.5rem; color: #94a3b8; font-size: 1.2rem; }
+        #feedback {
+            margin-top: 2rem; font-size: 2rem; font-weight: 600;
+            opacity: 0; transform: translateY(20px);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        #feedback.show { opacity: 1; transform: translateY(0); }
+        .success { color: #4ade80; }
+        .error { color: #f87171; }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+        
+        .top-controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            display: flex;
+            gap: 12px;
+            z-index: 10;
+        }
+        .ctrl-btn {
+            padding: 12px 24px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+        .ctrl-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        .btn-start {
+            background: rgba(74, 222, 128, 0.15);
+            border-color: rgba(74, 222, 128, 0.4);
+            color: #4ade80;
+        }
+        .btn-start:hover:not(:disabled) {
+            background: rgba(74, 222, 128, 0.25);
+            border-color: #4ade80;
+        }
+        .btn-end {
+            background: rgba(248, 113, 113, 0.15);
+            border-color: rgba(248, 113, 113, 0.4);
+            color: #f87171;
+        }
+        .btn-end:hover:not(:disabled) {
+            background: rgba(248, 113, 113, 0.25);
+            border-color: #f87171;
+        }
+        .btn-sync {
+            background: rgba(56, 189, 248, 0.15);
+            border-color: rgba(56, 189, 248, 0.4);
+            color: #38bdf8;
+        }
+        .btn-sync:hover:not(:disabled) {
+            background: rgba(56, 189, 248, 0.25);
+            border-color: #38bdf8;
+        }
+        .ctrl-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            filter: grayscale(100%);
+        }
+        .ctrl-btn.loading {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+        
+        input:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background: rgba(0, 0, 0, 0.2);
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="left-panel">
+        <div class="top-controls">
+            <button class="ctrl-btn btn-start" id="start-btn" onclick="startBusiness()">▶️ 開始營業</button>
+            <button class="ctrl-btn btn-end" id="end-btn" onclick="endBusiness()" disabled>⏹️ 結束營業並結算</button>
+            <button class="ctrl-btn btn-sync" id="sync-btn" onclick="syncExcel()">🔄 同步資料</button>
+        </div>
+        
+        <div class="clock-container">
+            <div class="clock-time" id="live-time">00:00:00</div>
+            <div class="clock-date" id="live-date">載入中...</div>
+        </div>
+
+        <div class="school-title">文華文理補習班</div>
+        <h1>請刷卡打卡</h1>
+        <div class="input-container">
+            <input type="text" id="card_number" placeholder="打卡機鎖定中，請點擊上方開始營業..." autocomplete="off" disabled>
+        </div>
+        <div class="instruction">游標請停留在框內，刷卡機會自動輸入感應卡號</div>
+        <div id="feedback"></div>
+    </div>
+    
+    <div class="right-panel">
+        <div class="right-header">今日刷卡紀錄即時看板</div>
+        <div class="history-list" id="history-list">
+            <!-- Items injected by JS -->
+        </div>
+    </div>
+
+    <script>
+        const inputField = document.getElementById('card_number');
+        const feedback = document.getElementById('feedback');
+        const historyList = document.getElementById('history-list');
+        let isProcessing = false;
+
+        // Live Clock logic
+        function updateClock() {
+            const now = new Date();
+            const timeEl = document.getElementById('live-time');
+            const dateEl = document.getElementById('live-date');
+            
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            timeEl.textContent = `${hours}:${minutes}:${seconds}`;
+            
+            const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
+            dateEl.textContent = now.toLocaleDateString('zh-TW', options);
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Keep focus if unlocked
+        document.addEventListener('click', (e) => {
+            if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON' && !inputField.disabled) {
+                inputField.focus();
+            }
+        });
+        
+        function startBusiness() {
+            inputField.disabled = false;
+            inputField.placeholder = "等待刷卡中...";
+            document.getElementById('start-btn').disabled = true;
+            document.getElementById('end-btn').disabled = false;
+            showFeedback('營業開始，系統已解鎖', 'success');
+            inputField.focus();
+        }
+
+        async function endBusiness() {
+            if(!confirm("確定要結束今日營業並結算打卡紀錄嗎？\n(結算後會自動下載今日的 Excel 報表)")) return;
+            
+            inputField.disabled = true;
+            inputField.placeholder = "打卡機鎖定中，請點擊上方開始營業...";
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('end-btn').disabled = true;
+            
+            const endBtn = document.getElementById('end-btn');
+            const originalHTML = endBtn.innerHTML;
+            endBtn.innerHTML = '<span style="animation:spin 1s linear infinite;">⏳</span> 處理中...';
+            
+            try {
+                const res = await fetch('/api/attendance/export', { method: 'POST' });
+                if (res.ok) {
+                    const data = await res.json();
+                    showFeedback(`今日營業結束，報表已存至 ${data.file_name}`, 'success');
+                } else {
+                    showFeedback('報表匯出失敗', 'error');
+                }
+            } catch (err) {
+                showFeedback('網路連線失敗', 'error');
+            } finally {
+                endBtn.innerHTML = originalHTML;
+            }
+        }
+        
+        async function syncExcel() {
+            const syncBtn = document.getElementById('sync-btn');
+            if (syncBtn.classList.contains('loading')) return;
+            
+            syncBtn.classList.add('loading');
+            syncBtn.innerHTML = `<span style="display:inline-block; animation:spin 1s linear infinite;">⏳</span> 同步中...`;
+            
+            try {
+                const res = await fetch('/api/sync-excel', { method: 'POST' });
+                const data = await res.json();
+                if (res.ok) {
+                    showFeedback(`✅ 同步成功！更新家長：${data.parents_updated}筆，學生：${data.students_updated}筆`, 'success');
+                } else {
+                    showFeedback(`❌ 同步失敗`, 'error');
+                }
+            } catch (err) {
+                showFeedback(`❌ 連線失敗`, 'error');
+            } finally {
+                syncBtn.classList.remove('loading');
+                syncBtn.innerHTML = `🔄 同步資料`;
+                if (!inputField.disabled) {
+                    inputField.focus();
+                }
+            }
+        }
+        
+        // Load history on mount
+        async function loadHistory() {
+            try {
+                const res = await fetch('/api/attendance/today');
+                const data = await res.json();
+                historyList.innerHTML = '';
+                // The API returns history in descending order, we want to display it as is.
+                data.forEach(record => {
+                    addHistoryToDOM(record.name, record.status, record.time, false);
+                });
+            } catch (err) {
+                console.error("Failed to load history", err);
+            }
+        }
+        loadHistory();
+        
+        inputField.addEventListener('keypress', async function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const cardNumber = inputField.value.trim();
+                if (cardNumber === '' || isProcessing) return;
+                
+                isProcessing = true;
+                inputField.disabled = true;
+                
+                try {
+                    const response = await fetch('/api/swipe', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ card_number: cardNumber })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        showFeedback(`✅ ${data.student_name} 刷卡成功：${data.new_status}`, 'success');
+                        const now = new Date();
+                        const timeStr = String(now.getHours()).padStart(2, '0') + ':' + 
+                                        String(now.getMinutes()).padStart(2, '0') + ':' + 
+                                        String(now.getSeconds()).padStart(2, '0');
+                        
+                        addHistoryToDOM(data.student_name, data.new_status, timeStr, true);
+                    } else {
+                        showFeedback(`❌ 錯誤：${data.detail}`, 'error');
+                    }
+                } catch (error) {
+                    showFeedback(`❌ 連線錯誤，請重試`, 'error');
+                } finally {
+                    inputField.value = '';
+                    inputField.disabled = false;
+                    inputField.focus();
+                    isProcessing = false;
+                }
+            }
+        });
+
+        function showFeedback(message, type) {
+            feedback.textContent = message;
+            feedback.className = `show ${type}`;
+            setTimeout(() => { feedback.className = ''; }, 3000);
+        }
+
+        function addHistoryToDOM(name, status, time, animate) {
+            const el = document.createElement('div');
+            el.className = `history-item ${status === '已進班' ? 'status-in' : 'status-out'}`;
+            if (!animate) { el.style.animation = 'none'; }
+            
+            const color = status === '已進班' ? '#4ade80' : '#f87171';
+            
+            el.innerHTML = `
+                <div class="history-info">
+                    <div class="name">${name}</div>
+                    <div class="time">${time}</div>
+                </div>
+                <div class="history-status" style="color: ${color}">
+                    ${status}
+                </div>
+            `;
+            
+            // Add to top of the list
+            historyList.prepend(el);
+        }
+    </script>
+</body>
+</html>

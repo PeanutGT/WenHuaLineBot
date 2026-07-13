@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智慧親師通 - 帳號綁定</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <!-- LINE LIFF SDK -->
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</head>
+<body>
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+    </div>
+    
+    <div class="glass-container">
+        <div class="header">
+            <div class="logo">🎓</div>
+            <h1>親師通服務綁定</h1>
+            <p>請驗證您的家長身分以接收即時通知</p>
+        </div>
+
+        <div id="loading" class="loading-state">
+            <div class="spinner"></div>
+            <p>正在初始化 LINE 環境...</p>
+        </div>
+
+        <div id="profile-section" class="hidden">
+            <img id="profile-img" src="" alt="Profile">
+            <p id="profile-name">User</p>
+        </div>
+
+        <div id="bind-form" class="hidden">
+            <div class="input-group">
+                <label for="phone">註冊手機號碼 (測試用: 0912345678)</label>
+                <input type="tel" id="phone" placeholder="例如: 0912345678" maxlength="10">
+            </div>
+            
+            <div class="otp-group">
+                <div class="input-group">
+                    <label for="otp">驗證碼</label>
+                    <input type="text" id="otp" placeholder="請輸入 6 位數" maxlength="6">
+                </div>
+                <button id="btn-get-otp" class="btn-secondary">取得驗證碼</button>
+            </div>
+
+            <button id="btn-bind" class="btn-primary">確認綁定</button>
+            <p id="message-area" class="message"></p>
+        </div>
+        
+        <div id="success-state" class="hidden">
+            <div class="success-icon">✅</div>
+            <h2>綁定成功！</h2>
+            <p>您現在可以關閉此視窗，並開始接收推播通知。</p>
+            <button id="btn-close" class="btn-primary">關閉視窗</button>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
