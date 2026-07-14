@@ -162,6 +162,10 @@ def sync_excel_to_db_from_file(file_content: bytes):
                 phone = clean_phone(row.get('媽媽手機'))
             if not phone:
                 phone = clean_phone(row.get('爸爸手機'))
+            if not phone:
+                phone = clean_phone(row.get('家裡電話'))
+            if not phone:
+                phone = clean_phone(row.get('學生手機'))
                 
             if not student_number or not student_name or not phone:
                 reason = []
