@@ -3,23 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="智慧親師通 - 補習班後台管理系統，支援快速匯入名單與下載報表。">
     <title>智慧親師通 - 補習班後台管理</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary: #4F46E5;
-            --primary-hover: #4338CA;
-            --bg-color: #F3F4F6;
-            --card-bg: #FFFFFF;
-            --text-main: #1F2937;
-            --text-muted: #6B7280;
-            --border-color: #E5E7EB;
-            --success: #10B981;
-            --error: #EF4444;
+            --primary: #38bdf8;
+            --primary-hover: #0ea5e9;
+            --bg-dark: #0f172a;
+            --card-bg: rgba(255, 255, 255, 0.05);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-color: rgba(255, 255, 255, 0.1);
+            --success: #4ade80;
+            --error: #f87171;
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-color);
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
             color: var(--text-main);
             margin: 0;
             padding: 0;
@@ -27,6 +29,33 @@
             justify-content: center;
             align-items: center;
             min-height: 100vh;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Ambient background blobs for premium feel */
+        .blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.3;
+            z-index: 0;
+            animation: float 10s infinite alternate ease-in-out;
+        }
+        .blob-1 {
+            top: -10%; left: -10%;
+            width: 400px; height: 400px;
+            background: #3b82f6;
+        }
+        .blob-2 {
+            bottom: -10%; right: -10%;
+            width: 500px; height: 500px;
+            background: #8b5cf6;
+            animation-delay: -5s;
+        }
+        @keyframes float {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(50px, 50px) scale(1.1); }
         }
 
         .container {
@@ -34,23 +63,41 @@
             max-width: 600px;
             padding: 20px;
             box-sizing: border-box;
+            z-index: 1;
+            position: relative;
         }
 
         .card {
             background-color: var(--card-bg);
-            border-radius: 16px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
             padding: 32px;
             margin-bottom: 24px;
-            transition: transform 0.2s;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        
+        @keyframes slideUp {
+            0% { opacity: 0; transform: translateY(40px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(255, 255, 255, 0.2);
         }
 
         h1 {
             text-align: center;
             font-size: 24px;
+            font-weight: 800;
             margin-top: 0;
             margin-bottom: 8px;
             color: var(--primary);
+            text-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
         }
 
         p.subtitle {
@@ -58,6 +105,7 @@
             color: var(--text-muted);
             margin-bottom: 32px;
             font-size: 14px;
+            font-weight: 600;
         }
 
         .form-group {
@@ -69,84 +117,119 @@
             font-weight: 600;
             margin-bottom: 8px;
             font-size: 14px;
+            color: var(--text-muted);
         }
 
         input[type="password"], input[type="file"] {
             width: 100%;
-            padding: 12px;
+            padding: 14px 16px;
+            background: rgba(0, 0, 0, 0.2);
             border: 1px solid var(--border-color);
-            border-radius: 8px;
-            box-sizing: border-box;
+            border-radius: 12px;
+            color: white;
             font-size: 16px;
-            transition: border-color 0.2s;
+            outline: none;
+            transition: all 0.3s ease;
+            box-sizing: border-box;
         }
 
         input[type="password"]:focus {
-            outline: none;
             border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+            box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+        }
+
+        input[type="file"]::file-selector-button {
+            background: rgba(255,255,255,0.1);
+            color: white;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 8px 16px;
+            margin-right: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        input[type="file"]::file-selector-button:hover {
+            background: rgba(255,255,255,0.2);
         }
 
         button {
             width: 100%;
             padding: 14px;
-            background-color: var(--primary);
-            color: white;
-            border: none;
-            border-radius: 8px;
+            background-color: rgba(56, 189, 248, 0.15);
+            color: var(--primary);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            border-radius: 12px;
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
-            transition: background-color 0.2s, transform 0.1s;
+            transition: all 0.3s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
 
-        button:hover {
-            background-color: var(--primary-hover);
+        button:hover:not(:disabled) {
+            background-color: rgba(56, 189, 248, 0.25);
+            border-color: var(--primary);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px -10px var(--primary);
         }
 
-        button:active {
+        button:active:not(:disabled) {
             transform: scale(0.98);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            filter: grayscale(100%);
         }
 
         button.btn-success {
-            background-color: var(--success);
+            background-color: rgba(74, 222, 128, 0.15);
+            color: var(--success);
+            border-color: rgba(74, 222, 128, 0.4);
         }
         
-        button.btn-success:hover {
-            background-color: #059669;
+        button.btn-success:hover:not(:disabled) {
+            background-color: rgba(74, 222, 128, 0.25);
+            border-color: var(--success);
+            box-shadow: 0 10px 20px -10px var(--success);
         }
 
         .status-message {
             margin-top: 16px;
             padding: 12px;
-            border-radius: 8px;
+            border-radius: 12px;
             font-size: 14px;
             display: none;
+            font-weight: 600;
+            text-align: center;
         }
 
         .status-message.success {
             display: block;
-            background-color: #ECFDF5;
-            color: #065F46;
-            border: 1px solid #A7F3D0;
+            background-color: rgba(74, 222, 128, 0.1);
+            color: var(--success);
+            border: 1px solid rgba(74, 222, 128, 0.2);
         }
 
         .status-message.error {
             display: block;
-            background-color: #FEF2F2;
-            color: #991B1B;
-            border: 1px solid #FECACA;
+            background-color: rgba(248, 113, 113, 0.1);
+            color: var(--error);
+            border: 1px solid rgba(248, 113, 113, 0.2);
         }
 
         .hidden {
-            display: none;
+            display: none !important;
         }
 
         /* Loading spinner */
         .loader {
-            border: 3px solid rgba(255,255,255,0.3);
+            border: 3px solid rgba(255,255,255,0.1);
             border-radius: 50%;
-            border-top: 3px solid white;
+            border-top: 3px solid var(--primary);
             width: 20px;
             height: 20px;
             animation: spin 1s linear infinite;
@@ -160,9 +243,25 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        /* Group Management Styles */
+        .group-list { margin-top: 16px; display: flex; flex-direction: column; gap: 12px; }
+        .group-item { background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; display: flex; justify-content: space-between; align-items: center; }
+        .group-info h3 { margin: 0 0 4px 0; font-size: 16px; color: var(--primary); }
+        .group-info p { margin: 0; font-size: 13px; color: var(--text-muted); }
+        .btn-danger { background-color: rgba(248, 113, 113, 0.15); color: var(--error); border-color: rgba(248, 113, 113, 0.4); padding: 8px 16px; width: auto; font-size: 14px; }
+        .btn-danger:hover:not(:disabled) { background-color: rgba(248, 113, 113, 0.25); border-color: var(--error); box-shadow: 0 10px 20px -10px var(--error); transform: translateY(-2px); }
+        .schedule-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+        .schedule-row select, .schedule-row input[type="time"] { background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-color); border-radius: 8px; color: white; padding: 8px; outline: none; }
+        .schedule-row select option { background: var(--bg-dark); }
+        .remove-row-btn { background: transparent; border: none; color: var(--error); cursor: pointer; padding: 4px; font-size: 18px; width: auto; box-shadow: none; }
+        .remove-row-btn:hover { background: transparent; box-shadow: none; transform: scale(1.1); color: #ff8f8f; border: none; }
     </style>
 </head>
 <body>
+
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
 
 <div class="container">
     
@@ -204,6 +303,30 @@
             <div id="exportStatus" class="status-message"></div>
         </div>
 
+        <!-- Group Schedule Section -->
+        <div class="card">
+            <h1>📅 班級與課表管理</h1>
+            <p class="subtitle">設定班級與表定時間，Excel 匯入時只要有「班級」欄位即會自動關聯</p>
+            
+            <div class="form-group">
+                <input type="text" id="newGroupName" placeholder="請輸入新班級名稱，例如：國一先修班" style="margin-bottom: 12px;">
+                <label>設定上課時間：</label>
+                <div id="scheduleContainer">
+                    <!-- Dynamic rows -->
+                </div>
+                <button type="button" onclick="addScheduleRow()" style="background:transparent; border: 1px dashed var(--border-color); margin-bottom: 16px; color: var(--text-muted); padding: 8px;">+ 新增一天上課日</button>
+                <button type="button" class="btn-success" id="createGroupBtn">儲存並建立班級</button>
+                <div id="groupStatus" class="status-message"></div>
+            </div>
+            
+            <div style="margin-top: 32px; border-top: 1px solid var(--border-color); padding-top: 16px;">
+                <label>已建立的班級清單：</label>
+                <div class="group-list" id="groupList">
+                    <!-- Groups loaded here -->
+                </div>
+            </div>
+        </div>
+
     </div>
 </div>
 
@@ -239,6 +362,7 @@
         
         loginSection.classList.add('hidden');
         dashboardSection.classList.remove('hidden');
+        loadGroups();
     });
 
     adminTokenInput.addEventListener('keypress', (e) => {
@@ -329,6 +453,119 @@
             exportBtn.disabled = false;
         }
     });
+
+    // Group Management Logic
+    const scheduleContainer = document.getElementById('scheduleContainer');
+    const groupList = document.getElementById('groupList');
+    const createGroupBtn = document.getElementById('createGroupBtn');
+    const groupStatus = document.getElementById('groupStatus');
+    const newGroupName = document.getElementById('newGroupName');
+
+    const dayMap = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'];
+
+    function addScheduleRow() {
+        const row = document.createElement('div');
+        row.className = 'schedule-row';
+        row.innerHTML = `
+            <select class="sched-day">
+                <option value="0">星期一</option><option value="1">星期二</option><option value="2">星期三</option><option value="3">星期四</option><option value="4">星期五</option><option value="5">星期六</option><option value="6">星期日</option>
+            </select>
+            <input type="time" class="sched-arr" value="17:00" title="到班時間">
+            <span style="color:var(--text-muted)">~</span>
+            <input type="time" class="sched-dep" value="21:00" title="放學時間">
+            <button type="button" class="remove-row-btn" onclick="this.parentElement.remove()">✕</button>
+        `;
+        scheduleContainer.appendChild(row);
+    }
+
+    async function loadGroups() {
+        try {
+            const res = await fetch('/api/groups', {
+                headers: { 'Authorization': `Bearer ${currentToken}` }
+            });
+            if (!res.ok) throw new Error("載入班級失敗");
+            const groups = await res.json();
+            groupList.innerHTML = '';
+            
+            if (groups.length === 0) {
+                groupList.innerHTML = '<p style="text-align:center; color:var(--text-muted);">尚未建立任何班級</p>';
+                return;
+            }
+
+            groups.forEach(g => {
+                const item = document.createElement('div');
+                item.className = 'group-item';
+                let schedHtml = g.schedules.map(s => `${dayMap[s.day_of_week]} ${s.arrival_time.substring(0,5)}~${s.departure_time.substring(0,5)}`).join('、');
+                if (!schedHtml) schedHtml = '無設定課表';
+                
+                item.innerHTML = `
+                    <div class="group-info">
+                        <h3>${g.name}</h3>
+                        <p>${schedHtml}</p>
+                    </div>
+                    <button class="btn-danger" onclick="deleteGroup(${g.id})">刪除</button>
+                `;
+                groupList.appendChild(item);
+            });
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function deleteGroup(id) {
+        if (!confirm('確定要刪除這個班級嗎？學生的班級關聯將會被清除。')) return;
+        try {
+            const res = await fetch(`/api/groups/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${currentToken}` }
+            });
+            if (res.ok) {
+                loadGroups();
+            }
+        } catch (e) {
+            alert('刪除失敗');
+        }
+    }
+
+    createGroupBtn.addEventListener('click', async () => {
+        const name = newGroupName.value.trim();
+        if (!name) { showStatus(groupStatus, '請輸入班級名稱', true); return; }
+        
+        const schedules = [];
+        const rows = scheduleContainer.querySelectorAll('.schedule-row');
+        rows.forEach(r => {
+            schedules.push({
+                day_of_week: parseInt(r.querySelector('.sched-day').value),
+                arrival_time: r.querySelector('.sched-arr').value,
+                departure_time: r.querySelector('.sched-dep').value
+            });
+        });
+
+        createGroupBtn.disabled = true;
+        try {
+            const res = await fetch('/api/groups', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${currentToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, schedules })
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || '建立失敗');
+            }
+            showStatus(groupStatus, '✅ 班級建立成功！', false);
+            newGroupName.value = '';
+            scheduleContainer.innerHTML = '';
+            addScheduleRow(); // reset one row
+            loadGroups();
+        } catch (e) {
+            showStatus(groupStatus, '❌ ' + e.message, true);
+        } finally {
+            createGroupBtn.disabled = false;
+        }
+    });
+
+    // Load initial row
+    addScheduleRow();
 
 </script>
 

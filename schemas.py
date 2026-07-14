@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import List, Optional
 
 class BindRequest(BaseModel):
     phone_number: str
@@ -12,3 +13,25 @@ class SwipeRequest(BaseModel):
     card_number: str
     offline_timestamp: str = None
     client_swipe_id: str = None
+
+class ClassScheduleBase(BaseModel):
+    day_of_week: int
+    arrival_time: str
+    departure_time: str
+
+class GroupCreate(BaseModel):
+    name: str
+    schedules: List[ClassScheduleBase]
+
+class ClassScheduleResponse(ClassScheduleBase):
+    id: int
+    class Config:
+        orm_mode = True
+
+class GroupResponse(BaseModel):
+    id: int
+    name: str
+    is_active: bool
+    schedules: List[ClassScheduleResponse]
+    class Config:
+        orm_mode = True

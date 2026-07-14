@@ -3,6 +3,7 @@ import sys
 import logging
 import io
 import secrets
+import re
 from fastapi import FastAPI, Request, HTTPException, Depends, Header, status, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
@@ -110,6 +111,8 @@ def clean_phone(val):
             s = str(int(val))
         else:
             s = str(val).strip()
+            # 先去掉分機常見符號後面的內容
+            s = re.split(r'[#\*ext分機]', s, flags=re.IGNORECASE)[0]
             s = ''.join(filter(str.isdigit, s))
             
         if not s:
@@ -117,16 +120,30 @@ def clean_phone(val):
         # 如果是 9 碼且以 9 開頭，自動補 0 (例如 912345678 -> 0912345678)
         if len(s) == 9 and s.startswith('9'):
             return '0' + s
+            
+        # 擷取台灣手機 10 碼 (09開頭) 或市話 (0開頭, 最多保留 10 碼)
+        if len(s) > 10 and s.startswith('09'):
+            return s[:10]
+        elif len(s) > 10 and s.startswith('0'):
+            return s[:10]
+            
         return s
     except Exception:
         return None
+
+@app.get("/api/config")
+def get_config():
+    return {"liffId": os.getenv("LIFF_ID", "")}
 
 # Use UploadFile in the API endpoint instead of reading from disk
 def sync_excel_to_db_from_file(file_content: bytes):
     logger.info("Starting stateless Excel sync...")
     try:
         db = SessionLocal()
-        df = pd.read_excel(io.BytesIO(file_content))
+        df = pd.read_excel(io.BytesIO(file_content), dtype=str)
+        
+        # Replace NaN with None
+        df = df.where(pd.notnull(df), None)
         
         parents_updated = 0
         students_updated = 0
@@ -135,21 +152,9 @@ def sync_excel_to_db_from_file(file_content: bytes):
         for index, row in df.iterrows():
             row_idx = index + 2 # Excel is 1-indexed, plus header
             
-            # Handle student number (might be float in pandas)
-            raw_sn = row.get('學號')
-            if pd.notna(raw_sn):
-                student_number = str(int(raw_sn)).strip() if isinstance(raw_sn, float) else str(raw_sn).strip()
-            else:
-                student_number = None
-                
-            student_name = str(row['姓名']).strip() if pd.notna(row['姓名']) else None
-            
-            # Handle card number (often read as float e.g. 123.0)
-            raw_card = row.get('卡號')
-            if pd.notna(raw_card):
-                card_number = str(int(raw_card)).strip() if isinstance(raw_card, float) else str(raw_card).strip()
-            else:
-                card_number = None
+            student_number = str(row.get('學號')).strip() if row.get('學號') else None
+            student_name = str(row.get('姓名')).strip() if row.get('姓名') else None
+            card_number = str(row.get('卡號')).strip() if row.get('卡號') else None
             
             phone = clean_phone(row.get('簡訊電話1'))
             if not phone:
@@ -167,7 +172,7 @@ def sync_excel_to_db_from_file(file_content: bytes):
                 
             # 確保家長存在並更新名稱 (若有改變)
             parent = db.query(Parent).filter(Parent.phone_number == phone).first()
-            parent_name = str(row.get('家長姓名')).strip() if '家長姓名' in row and pd.notna(row['家長姓名']) else f"{student_name}的家長"
+            parent_name = str(row.get('家長姓名')).strip() if '家長姓名' in row and row.get('家長姓名') else f"{student_name}的家長"
             
             if not parent:
                 parent = Parent(name=parent_name, phone_number=phone)
@@ -179,18 +184,29 @@ def sync_excel_to_db_from_file(file_content: bytes):
                 if parent.name != parent_name:
                     parent.name = parent_name
                     db.commit()
+                    
+            # Handle Group mapping
+            group_name = str(row.get('班級')).strip() if '班級' in row and row.get('班級') else None
+            group_id = None
+            if group_name:
+                group = db.query(models.Group).filter(models.Group.name == group_name).first()
+                if group:
+                    group_id = group.id
                 
             # 確保學生存在並更新資料
             student = db.query(Student).filter(Student.student_number == student_number).first()
             if not student:
-                student = Student(name=student_name, student_number=student_number, card_number=card_number, parent_id=parent.id)
+                student = Student(name=student_name, student_number=student_number, card_number=card_number, parent_id=parent.id, group_id=group_id)
                 db.add(student)
                 students_updated += 1
             else:
-                if student.name != student_name or student.parent_id != parent.id or student.card_number != card_number:
-                    student.name = student_name
-                    student.parent_id = parent.id
-                    student.card_number = card_number
+                updated = False
+                if student.name != student_name: student.name = student_name; updated = True
+                if student.parent_id != parent.id: student.parent_id = parent.id; updated = True
+                if student.card_number != card_number: student.card_number = card_number; updated = True
+                if student.group_id != group_id: student.group_id = group_id; updated = True
+                
+                if updated:
                     db.commit()
                     students_updated += 1
                     
@@ -435,11 +451,61 @@ def handle_message(event):
 
     # OTP Functionality removed per user request
 
+@app.get("/api/groups", response_model=list[schemas.GroupResponse])
+def get_groups(db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
+    groups = db.query(models.Group).filter(models.Group.is_active == True).all()
+    return groups
+
+@app.post("/api/groups")
+def create_group(req: schemas.GroupCreate, db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
+    group = db.query(models.Group).filter(models.Group.name == req.name).first()
+    if not group:
+        group = models.Group(name=req.name)
+        db.add(group)
+        db.flush()
+    else:
+        group.is_active = True
+        
+    db.query(models.ClassSchedule).filter(models.ClassSchedule.group_id == group.id).delete()
+    
+    for sched in req.schedules:
+        try:
+            arr_time = datetime.datetime.strptime(sched.arrival_time, "%H:%M").time()
+            dep_time = datetime.datetime.strptime(sched.departure_time, "%H:%M").time()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="時間格式錯誤，需為 HH:MM")
+            
+        new_sched = models.ClassSchedule(
+            group_id=group.id,
+            day_of_week=sched.day_of_week,
+            arrival_time=arr_time,
+            departure_time=dep_time
+        )
+        db.add(new_sched)
+        
+    db.commit()
+    return {"status": "success"}
+
+@app.delete("/api/groups/{group_id}")
+def delete_group(group_id: int, db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
+    group = db.query(models.Group).filter(models.Group.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    
+    group.is_active = False
+    db.query(models.ClassSchedule).filter(models.ClassSchedule.group_id == group_id).delete()
+    db.query(Student).filter(Student.group_id == group_id).update({"group_id": None})
+    
+    db.commit()
+    return {"status": "success"}
+
 @app.post("/api/bind")
 def bind_account(req: schemas.BindRequest, db: Session = Depends(get_db)):
-    # Simplified binding: Verify parent exists only based on phone_number
-    
-    parent = db.query(Parent).filter(Parent.phone_number == req.phone_number).first()
+    phone = clean_phone(req.phone_number)
+    if not phone:
+        raise HTTPException(status_code=400, detail="無效的手機號碼格式")
+        
+    parent = db.query(Parent).filter(Parent.phone_number == phone).first()
     if not parent:
         raise HTTPException(status_code=404, detail="找不到對應之家長資料")
     

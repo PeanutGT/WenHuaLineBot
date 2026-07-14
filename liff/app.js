@@ -1,9 +1,15 @@
-const liffId = "REPLACE_WITH_YOUR_LIFF_ID"; // 用戶需自行設定 LIFF ID
-
 let userLineId = "";
 
 async function initializeLiff() {
     try {
+        const configRes = await fetch('/api/config');
+        const config = await configRes.json();
+        const liffId = config.liffId;
+
+        if (!liffId || liffId.trim() === '') {
+            throw new Error("LIFF ID not configured on server.");
+        }
+
         await liff.init({ liffId: liffId });
         if (!liff.isLoggedIn()) {
             liff.login();

@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="智慧補習班 - 前台打卡系統。支援快速進班離班打卡，自動推播 LINE 通知家長。">
     <title>智慧補習班 - 刷卡系統</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
@@ -198,6 +199,43 @@
             background: rgba(0, 0, 0, 0.2);
         }
         @keyframes spin { 100% { transform: rotate(360deg); } }
+        
+        @media (max-width: 900px) {
+            body {
+                flex-direction: column;
+                height: auto;
+                min-height: 100vh;
+                overflow: auto;
+            }
+            .left-panel {
+                flex: none;
+                min-height: 100vh;
+                padding: 100px 20px 40px; /* space for top-controls */
+                border-right: none;
+                border-bottom: 1px solid rgba(255,255,255,0.1);
+            }
+            .right-panel {
+                width: 100%;
+                min-height: 50vh;
+            }
+            .top-controls {
+                flex-wrap: wrap;
+                width: calc(100% - 40px);
+            }
+            .ctrl-btn {
+                flex: 1;
+                justify-content: center;
+                font-size: 0.9rem;
+                padding: 10px;
+                white-space: nowrap;
+            }
+            input {
+                font-size: 1.8rem;
+                padding: 16px;
+            }
+            .clock-time { font-size: 3.5rem; }
+            h1 { font-size: 2rem; }
+        }
     </style>
 </head>
 <body>
@@ -231,8 +269,8 @@
 
     <script>
         // Phase 1 Zero Trust Tokens
-        const KIOSK_TOKEN = "kiosk_secret_token_11111";
-        const ADMIN_TOKEN = "admin_secret_token_12345";
+        let KIOSK_TOKEN = sessionStorage.getItem('KIOSK_TOKEN') || "";
+        let ADMIN_TOKEN = sessionStorage.getItem('ADMIN_TOKEN') || "";
         
         const inputField = document.getElementById('card_number');
         const feedback = document.getElementById('feedback');
@@ -269,6 +307,11 @@
                     console.log("Offline record synced successfully");
                     // Refresh history silently
                     loadHistory();
+                } else if (response.status >= 400 && response.status < 500) {
+                    // Client error (e.g., 404), cannot be fixed by retrying. Remove from queue.
+                    console.error("Offline record dropped due to client error:", response.status);
+                    offlineQueue.shift();
+                    saveQueue();
                 }
             } catch (err) {
                 console.log("Still offline, will retry later...");
@@ -300,16 +343,34 @@
         });
         
         function startBusiness() {
+            if (!KIOSK_TOKEN) {
+                const token = prompt("請輸入打卡機密碼 (KIOSK_TOKEN) 以啟動設備：");
+                if (!token) return;
+                KIOSK_TOKEN = token.trim();
+                sessionStorage.setItem('KIOSK_TOKEN', KIOSK_TOKEN);
+            }
+            
             inputField.disabled = false;
             inputField.placeholder = "等待刷卡中...";
             document.getElementById('start-btn').disabled = true;
             document.getElementById('end-btn').disabled = false;
             showFeedback('營業開始，系統已解鎖', 'success');
             inputField.focus();
+            
+            if (historyList.children.length === 0) {
+                loadHistory();
+            }
         }
 
         async function endBusiness() {
             if(!confirm("確定要結束今日營業並結算打卡紀錄嗎？\n(結算後會自動下載今日的 Excel 報表)")) return;
+            
+            if (!ADMIN_TOKEN) {
+                const adminToken = prompt("請輸入管理員密碼 (ADMIN_TOKEN) 以結算報表：");
+                if (!adminToken) return;
+                ADMIN_TOKEN = adminToken.trim();
+                sessionStorage.setItem('ADMIN_TOKEN', ADMIN_TOKEN);
+            }
             
             inputField.disabled = true;
             inputField.placeholder = "打卡機鎖定中，請點擊上方開始營業...";
@@ -361,6 +422,13 @@
             const syncBtn = document.getElementById('sync-btn');
             if (syncBtn.classList.contains('loading')) return;
             
+            if (!ADMIN_TOKEN) {
+                const adminToken = prompt("請輸入管理員密碼 (ADMIN_TOKEN) 以同步資料：");
+                if (!adminToken) return;
+                ADMIN_TOKEN = adminToken.trim();
+                sessionStorage.setItem('ADMIN_TOKEN', ADMIN_TOKEN);
+            }
+            
             // Create a hidden file input
             const fileInput = document.createElement('input');
             fileInput.type = 'file';
@@ -407,6 +475,7 @@
         
         // Load history on mount
         async function loadHistory() {
+            if (!KIOSK_TOKEN) return;
             try {
                 const res = await fetch('/api/attendance/today', {
                     headers: { 'Authorization': `Bearer ${KIOSK_TOKEN}` }
@@ -423,7 +492,9 @@
                 console.error("Failed to load history", err);
             }
         }
-        loadHistory();
+        if (KIOSK_TOKEN) {
+            loadHistory();
+        }
         
         inputField.addEventListener('keypress', async function (e) {
             if (e.key === 'Enter') {
