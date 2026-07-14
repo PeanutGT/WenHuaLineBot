@@ -1,57 +1,73 @@
 # 智慧親師通系統 (WenHuaLineBot)
 
-本專案是一個專為補習班設計的「零信任資安」打卡與家長通知系統。採用 **全雲端化 (Thin Client)** 架構，讓補習班內無論多麼老舊的電腦 (如 Windows 7 32-bit)、或是平板、手機，都只需「打開網頁瀏覽器」即可完美運作！
+本專案是一個專為補習班設計的「零信任資安」打卡與家長通知系統。採用 **全雲端化 (Thin Client)** 架構，讓補習班內無論多麼老舊的電腦 (如 Windows 7 32-bit)、平板或手機，都只需打開網頁瀏覽器即可完美運作！
 
-## 🌟 系統亮點
-
-1. **無限相容的老電腦救星**：補習班端無需安裝任何軟體或應用程式，打開瀏覽器 `https://您的網域/static/swipe.html` 即可進行無延遲的刷卡作業。
-2. **全雲端化 24H 運作**：結合免費的 Render.com 與 Supabase PostgreSQL，系統全天候在雲端運作，不用擔心家裡/補習班電腦當機斷線。
-3. **離線容錯機制**：就算補習班網路突然斷線，網頁端會自動將打卡紀錄暫存於瀏覽器 (LocalStorage) 中，待網路恢復後自動回傳補登，確保資料絕不遺失。
-4. **一鍵部署 (Infrastructure as Code)**：內建 `render.yaml`，連接 GitHub 後即可達成真正的「一鍵上線」。
+目前系統已全面部署至雲端，所有的功能皆可透過專屬網址直接存取。
+**專屬網址**：[https://wenhuacheckin.onrender.com/](https://wenhuacheckin.onrender.com/)
 
 ---
 
-## 🚀 全雲端部署教學 (100% 免費方案)
+## 🌟 系統特色
 
-### 步驟一：建立免費雲端資料庫 (Supabase)
-1. 前往 [Supabase](https://supabase.com/) 註冊並建立 New Project。
-2. 進入 Project Settings -> Database，找到 **Connection string (URI)**。
-3. 複製並把密碼替換好 (這就是您的 `DATABASE_URL`)。
-
-### 步驟二：一鍵部署至 Render
-1. 前往 [Render.com](https://render.com/) 註冊並綁定您的 GitHub 帳號。
-2. 點擊 `New +` -> `Blueprint`。
-3. 選擇本專案的 GitHub 儲存庫。
-4. 系統會自動讀取 `render.yaml`，您只需要在介面上填入以下環境變數 (Environment Variables)：
-   - `DATABASE_URL`: (剛才的 Supabase URI)
-   - `LINE_CHANNEL_SECRET`: (您的 LINE 機器人 Secret)
-   - `LINE_CHANNEL_ACCESS_TOKEN`: (您的 LINE 機器人 Token)
-   - `ADMIN_TOKEN`: (自訂管理員密碼)
-   - `CRON_TOKEN`: (自訂排程密碼)
-   - `KIOSK_TOKEN`: (自訂打卡機密碼)
-5. 點擊 Apply，等待約 3 分鐘，您的專案就上線了！(您會獲得一個專屬網址，例如 `https://wenhua-linebot.onrender.com`)
-
-### 步驟三：日常營運 (補習班端)
-補習班**不需要做任何安裝**！
-1. 打開電腦上的 Chrome 瀏覽器。
-2. 進入網址：`https://您的Render網址/static/swipe.html`。
-3. 將游標停在輸入框，學生拿卡片嗶下去，家長就會立刻收到 LINE 通知！
+1. **老舊電腦救星**：補習班端無需安裝任何軟體。只需一台能上網的電腦加上 USB 刷卡機，就能達成無延遲刷卡作業。
+2. **極簡的家長綁定**：去除繁瑣的驗證碼步驟，家長點選專屬 LIFF 網址後，輸入手機號碼即可瞬間完成 LINE 綁定。
+3. **無痛的後台管理**：專屬的圖形化後台介面，支援一鍵上傳 Excel 名單建檔，以及一鍵下載當日出勤 Excel 報表。
+4. **離線容錯機制**：萬一補習班網路瞬斷，刷卡網頁會自動暫存打卡紀錄於瀏覽器內，待網路恢復後自動回傳補登。
+5. **防止重複推播**：具備 Idempotency Key (冪等性) 設計，確保網路重試時不會導致家長收到重複的到班通知。
 
 ---
 
-## 🛠️ 進階開發者專區：單機免安裝版 (Standalone)
-如果您因為某些原因無法使用雲端平台，仍可透過我們編譯的免安裝版，在本地電腦運行 (僅限 64 位元 Windows 10/11)。
+## 🚀 日常營運操作手冊 (給補習班櫃檯/管理者)
 
-1. **打包指令**：執行專案內的 `build.bat`。
-2. **產出物**：打包完成後，檔案會集中在 `dist/SmartSchoolBot`。
-3. **啟動隧道**：您需要自行下載 Zrok (`zrok.exe`) 並執行 `zrok reserve public localhost:8000 --backend-mode proxy` 取得外網穿透網址。
-4. **執行伺服器**：雙擊 `SmartSchoolBot.exe` 即可啟動本地伺服器。
+### 一、每日刷卡 (學生到班/離班)
+這是放在櫃檯讓學生拿卡片嗶嗶的畫面。
+1. **網址**：[https://wenhuacheckin.onrender.com/static/swipe.html](https://wenhuacheckin.onrender.com/static/swipe.html)
+2. **操作步驟**：
+   - 每天開門時，打開上述網址 (建議存成瀏覽器書籤)。
+   - 輸入「打卡機密碼」(KIOSK_TOKEN) 後，點擊「開始營業」。
+   - 將滑鼠游標停留在白色的輸入框內。
+   - 學生拿卡片在 USB 感應機上刷卡，系統會自動輸入卡號並按下 Enter，家長立刻收到 LINE 到班通知！
+
+### 二、後台管理 (匯入名單與下載報表)
+這是只有老闆與行政老師可以進入的系統後台。
+1. **網址**：[https://wenhuacheckin.onrender.com/static/admin.html](https://wenhuacheckin.onrender.com/static/admin.html)
+2. **操作步驟**：
+   - 進入網址後，輸入「管理員密碼」(ADMIN_TOKEN) 登入。
+   - **匯入學生名單**：點擊上傳 Excel (檔案內需包含：`學號`、`姓名`、`卡號`、`簡訊電話1` / `媽媽手機` / `爸爸手機`)，系統會自動新建或更新學生與家長資料。
+   - **下載今日出勤**：點擊下載按鈕，即可取得今天所有學生的進班與離班打卡時間明細報表。
+
+### 三、家長綁定身分 (給家長的手機操作)
+為了讓家長能收到 LINE 通知，必須先進行綁定。
+1. 家長在補習班官方 LINE 帳號，點擊下方「圖文選單」的 **[綁定身分]**。
+2. 畫面會跳出綁定網頁 (LIFF)。
+3. 家長輸入當初留在補習班的 **聯絡手機號碼**。
+4. 點擊「確認綁定」，系統比對符合後即刻綁定成功，未來學生刷卡就會收到通知。
 
 ---
 
-## 🛡️ 資安防護機制
+## 🛠️ 開發與部署指南 (給開發人員)
 
-1. **全分離架構**：不再使用 LINE 官方帳號對話框直接綁定。全面升級為 LIFF 網頁結合「簡訊 OTP」綁定，杜絕任意冒名註冊。
-2. **零信任 API**：前端網頁每次呼叫後端皆需夾帶 Bearer Token，並且嚴格驗證來源網域 (CORS Allow Origins)。
-3. **防時序攻擊 (Timing Attack)**：密碼驗證全面採用 `secrets.compare_digest`。
-4. **離線打卡去重 (`client_swipe_id`)**：解決網路不穩導致的重複推播與重複寫入問題。
+### 雲端架構配置 (Render + Supabase)
+本專案的生產環境使用 Render (Web Service) 與 Supabase (PostgreSQL 資料庫)。
+內建 `render.yaml` 支援一鍵部署 (Infrastructure as Code)。
+
+#### 必備環境變數 (Environment Variables)：
+- `DATABASE_URL`: Supabase 連接池網址 (請務必勾選 Use connection pooling，採用 IPv4 格式，例如 `postgresql://postgres:密碼@aws-0-ap...pooler.supabase.com:6543/postgres`)
+- `LINE_CHANNEL_SECRET`: LINE 機器人的 Secret 金鑰
+- `LINE_CHANNEL_ACCESS_TOKEN`: LINE 機器人的 Access Token 金鑰
+- `ADMIN_TOKEN`: 後台管理頁面的登入密碼
+- `KIOSK_TOKEN`: 前台刷卡機頁面的啟動密碼
+- `CRON_TOKEN`: 給定時排程任務使用的安全金鑰
+
+### 關於喚醒延遲 (防休眠機制)
+Render 免費方案在 15 分鐘無人使用後會進入休眠。為避免第一位學生刷卡時遇到 50 秒的喚醒延遲：
+強烈建議使用免費服務 [cron-job.org](https://cron-job.org/)，設定每 **14 分鐘** 對 `https://wenhuacheckin.onrender.com/static/swipe.html` 發送一次 GET 請求，確保伺服器 24 小時保持清醒。
+
+---
+
+## 📦 單機免安裝版 (Legacy Standalone / 進階備查)
+如果您未來遇到雲端服務大斷線，需要轉為本地運行 (僅限 64 位元 Windows 10/11)。
+1. **打包指令**：開發環境執行 `build.bat`。
+2. **產出物**：打包完成的檔案會在 `dist/SmartSchoolBot` 內。
+3. **啟動隧道**：需自行下載 Zrok (`zrok.exe`) 並執行 `zrok reserve public localhost:8000 --backend-mode proxy` 取得外網穿透網址。
+4. **執行伺服器**：雙擊 `SmartSchoolBot.exe` 啟動本地伺服器，將使用同目錄下的 `test.db` SQLite 資料庫。
