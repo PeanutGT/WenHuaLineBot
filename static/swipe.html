@@ -230,10 +230,50 @@
     </div>
 
     <script>
+        // Phase 1 Zero Trust Tokens
+        const KIOSK_TOKEN = "kiosk_secret_token_11111";
+        const ADMIN_TOKEN = "admin_secret_token_12345";
+        
         const inputField = document.getElementById('card_number');
         const feedback = document.getElementById('feedback');
         const historyList = document.getElementById('history-list');
         let isProcessing = false;
+        
+        // Phase 3: Offline Queue Initialization
+        let offlineQueue = JSON.parse(localStorage.getItem('swipeQueue') || '[]');
+        
+        function saveQueue() {
+            localStorage.setItem('swipeQueue', JSON.stringify(offlineQueue));
+        }
+        
+        // Background sync worker
+        setInterval(async () => {
+            if (offlineQueue.length === 0) return;
+            
+            // Try to sync the oldest record
+            const record = offlineQueue[0];
+            try {
+                const response = await fetch('/api/swipe', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${KIOSK_TOKEN}`
+                    },
+                    body: JSON.stringify({ card_number: record.card_number, offline_timestamp: record.timestamp })
+                });
+                
+                if (response.ok) {
+                    // Success, remove from queue
+                    offlineQueue.shift();
+                    saveQueue();
+                    console.log("Offline record synced successfully");
+                    // Refresh history silently
+                    loadHistory();
+                }
+            } catch (err) {
+                console.log("Still offline, will retry later...");
+            }
+        }, 5000);
 
         // Live Clock logic
         function updateClock() {
@@ -281,12 +321,34 @@
             endBtn.innerHTML = '<span style="animation:spin 1s linear infinite;">⏳</span> 處理中...';
             
             try {
-                const res = await fetch('/api/attendance/export', { method: 'POST' });
+                const res = await fetch('/api/attendance/export', { 
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${ADMIN_TOKEN}` }
+                });
                 if (res.ok) {
-                    const data = await res.json();
-                    showFeedback(`今日營業結束，報表已存至 ${data.file_name}`, 'success');
+                    const blob = await res.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    
+                    // Extract filename from content-disposition header if possible
+                    const disposition = res.headers.get('content-disposition');
+                    let filename = '出勤紀錄.xlsx';
+                    if (disposition && disposition.indexOf('filename=') !== -1) {
+                        const matches = /filename="([^"]*)"/.exec(disposition);
+                        if (matches != null && matches[1]) { 
+                            filename = matches[1];
+                        }
+                    }
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+                    
+                    showFeedback(`✅ 今日營業結束，報表已開始下載`, 'success');
                 } else {
-                    showFeedback('報表匯出失敗', 'error');
+                    showFeedback('❌ 報表匯出失敗', 'error');
                 }
             } catch (err) {
                 showFeedback('網路連線失敗', 'error');
@@ -299,38 +361,59 @@
             const syncBtn = document.getElementById('sync-btn');
             if (syncBtn.classList.contains('loading')) return;
             
-            syncBtn.classList.add('loading');
-            syncBtn.innerHTML = `<span style="display:inline-block; animation:spin 1s linear infinite;">⏳</span> 同步中...`;
-            
-            try {
-                const res = await fetch('/api/sync-excel', { method: 'POST' });
-                const data = await res.json();
-                if (res.ok) {
-                    showFeedback(`✅ 同步成功！更新家長：${data.parents_updated}筆，學生：${data.students_updated}筆`, 'success');
-                } else {
-                    showFeedback(`❌ 同步失敗`, 'error');
+            // Create a hidden file input
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = '.xlsx, .xls';
+            fileInput.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                syncBtn.classList.add('loading');
+                syncBtn.innerHTML = `<span style="display:inline-block; animation:spin 1s linear infinite;">⏳</span> 同步中...`;
+                
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                try {
+                    const res = await fetch('/api/sync-excel', { 
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${ADMIN_TOKEN}` },
+                        body: formData
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        showFeedback(`✅ 同步成功！更新家長：${data.parents_updated}筆，學生：${data.students_updated}筆`, 'success');
+                    } else {
+                        showFeedback(`❌ 同步失敗`, 'error');
+                    }
+                } catch (err) {
+                    showFeedback(`❌ 連線失敗`, 'error');
+                } finally {
+                    syncBtn.classList.remove('loading');
+                    syncBtn.innerHTML = `🔄 同步資料`;
+                    if (!inputField.disabled) {
+                        inputField.focus();
+                    }
                 }
-            } catch (err) {
-                showFeedback(`❌ 連線失敗`, 'error');
-            } finally {
-                syncBtn.classList.remove('loading');
-                syncBtn.innerHTML = `🔄 同步資料`;
-                if (!inputField.disabled) {
-                    inputField.focus();
-                }
-            }
+            };
+            fileInput.click();
         }
         
         // Load history on mount
         async function loadHistory() {
             try {
-                const res = await fetch('/api/attendance/today');
-                const data = await res.json();
-                historyList.innerHTML = '';
-                // The API returns history in descending order, we want to display it as is.
-                data.forEach(record => {
-                    addHistoryToDOM(record.name, record.status, record.time, false);
+                const res = await fetch('/api/attendance/today', {
+                    headers: { 'Authorization': `Bearer ${KIOSK_TOKEN}` }
                 });
+                if (res.ok) {
+                    const data = await res.json();
+                    historyList.innerHTML = '';
+                    // The API returns history in descending order, we want to display it as is.
+                    data.forEach(record => {
+                        addHistoryToDOM(record.name, record.status, record.time, false);
+                    });
+                }
             } catch (err) {
                 console.error("Failed to load history", err);
             }
@@ -349,7 +432,10 @@
                 try {
                     const response = await fetch('/api/swipe', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${KIOSK_TOKEN}`
+                        },
                         body: JSON.stringify({ card_number: cardNumber })
                     });
                     
@@ -366,8 +452,15 @@
                     } else {
                         showFeedback(`❌ 錯誤：${data.detail}`, 'error');
                     }
-                } catch (error) {
-                    showFeedback(`❌ 連線錯誤，請重試`, 'error');
+                } catch (err) {
+                    // Phase 3: Offline mode fallback
+                    console.error("Network error, switching to offline queue");
+                    const timestamp = new Date().toISOString();
+                    offlineQueue.push({ card_number: cardNumber, timestamp: timestamp });
+                    saveQueue();
+                    
+                    showFeedback(`📶 [離線暫存] 卡號 ${cardNumber} 已記錄`, 'success');
+                    addHistoryToDOM("未知(離線)", "已暫存", new Date().toLocaleTimeString('zh-TW', {hour: '2-digit', minute:'2-digit'}));
                 } finally {
                     inputField.value = '';
                     inputField.disabled = false;

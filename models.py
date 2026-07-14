@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Time
 from sqlalchemy.orm import relationship
 from database import Base
 import datetime
@@ -27,8 +27,38 @@ class Student(Base):
     
     # Foreign Key linking to Parent
     parent_id = Column(Integer, ForeignKey("parents.id"))
+    group_id = Column(Integer, ForeignKey("groups.id"), nullable=True)
+    
     parent = relationship("Parent", back_populates="students")
+    group = relationship("Group", back_populates="students")
     attendances = relationship("Attendance", back_populates="student")
+
+class Group(Base):
+    __tablename__ = "groups"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False)
+    
+    students = relationship("Student", back_populates="group")
+    schedules = relationship("ClassSchedule", back_populates="group")
+
+class ClassSchedule(Base):
+    __tablename__ = "class_schedules"
+    id = Column(Integer, primary_key=True, index=True)
+    group_id = Column(Integer, ForeignKey("groups.id"))
+    day_of_week = Column(Integer, nullable=False) # 0=Monday, 6=Sunday
+    arrival_time = Column(Time, nullable=False)
+    departure_time = Column(Time, nullable=False)
+    is_active = Column(Boolean, default=True)
+    
+    group = relationship("Group", back_populates="schedules")
+
+class NotificationLog(Base):
+    __tablename__ = "notification_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("students.id"))
+    notification_type = Column(String, nullable=False) # e.g. "missing_departure"
+    date = Column(String, nullable=False) # e.g. "2026-07-14"
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
 
 class Attendance(Base):
     __tablename__ = "attendances"

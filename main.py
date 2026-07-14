@@ -1,8 +1,10 @@
 import os
 import sys
 import logging
-from fastapi import FastAPI, Request, HTTPException, Depends, Header
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi import FastAPI, Request, HTTPException, Depends, Header, status, UploadFile, File
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from linebot.v3 import WebhookHandler
@@ -20,7 +22,8 @@ from fastapi.staticfiles import StaticFiles
 import datetime
 from linebot.v3.messaging import PushMessageRequest, TextMessage
 import pandas as pd
-from apscheduler.schedulers.background import BackgroundScheduler
+from linebot.v3.messaging import PushMessageRequest, TextMessage
+import pandas as pd
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -40,12 +43,44 @@ if channel_secret is None or channel_access_token is None:
     sys.exit(1)
 
 configuration = Configuration(access_token=channel_access_token)
+
+# Phase 1 Zero Trust: Token Definitions
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN")
+CRON_TOKEN = os.getenv("CRON_TOKEN")
+KIOSK_TOKEN = os.getenv("KIOSK_TOKEN")
+
+security = HTTPBearer()
+
+def verify_kiosk_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    if credentials.credentials != KIOSK_TOKEN:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Kiosk Token")
+    return credentials.credentials
+
+def verify_admin_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    if credentials.credentials != ADMIN_TOKEN:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Admin Token")
+    return credentials.credentials
+
+def verify_cron_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    if credentials.credentials != CRON_TOKEN:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Cron Token")
+    return credentials.credentials
+
 handler = WebhookHandler(channel_secret)
 
 app = FastAPI(
     title="Smart Parent-Teacher Communication System",
     description="Backend API for LINE Messaging API integration.",
     version="1.0.0"
+)
+
+# Phase 4: Zero Trust CORS Middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Should be restricted to ngrok domains in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Mount static files
@@ -71,11 +106,13 @@ def clean_phone(val):
     except:
         return None
 
-def sync_excel_to_db():
-    logger.info("Starting Excel sync...")
+# Use UploadFile in the API endpoint instead of reading from disk
+def sync_excel_to_db_from_file(file_content: bytes):
+    logger.info("Starting stateless Excel sync...")
+    import io
     try:
         db = SessionLocal()
-        df = pd.read_excel('excels/學生資料.xlsx')
+        df = pd.read_excel(io.BytesIO(file_content))
         
         parents_updated = 0
         students_updated = 0
@@ -145,21 +182,49 @@ def sync_excel_to_db():
 
 @app.on_event("startup")
 def startup_event():
-    sync_excel_to_db()
-    # Initialize Scheduler
-    scheduler = BackgroundScheduler(timezone="Asia/Taipei")
-    scheduler.add_job(check_missing_departure, 'cron', hour=22, minute=0)
-    scheduler.add_job(send_daily_summary, 'cron', hour=22, minute=30)
-    scheduler.start()
-    logger.info("Background Scheduler started.")
+    logger.info("Startup complete. Cron scheduling is now externalized.")
 
-def check_missing_departure():
-    logger.info("Running check_missing_departure...")
+@app.post("/api/cron/check_missing_departure")
+def check_missing_departure(token: str = Depends(verify_cron_token)):
+    logger.info("Running external cron check_missing_departure...")
     db = SessionLocal()
     try:
-        today_start = datetime.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        now_utc = datetime.datetime.utcnow()
+        now_tw = now_utc + datetime.timedelta(hours=8)
+        today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_date_str = now_tw.strftime('%Y-%m-%d')
+        day_of_week = now_tw.weekday()
+        
         students = db.query(Student).all()
         for s in students:
+            if not s.group:
+                continue
+                
+            schedule = db.query(models.ClassSchedule).filter(
+                models.ClassSchedule.group_id == s.group.id,
+                models.ClassSchedule.day_of_week == day_of_week,
+                models.ClassSchedule.is_active == True
+            ).first()
+            
+            if not schedule:
+                continue # No class today or schedule inactive
+                
+            # Check if current time is past departure time + 15 mins buffer
+            dep_time = schedule.departure_time
+            dep_datetime = now_tw.replace(hour=dep_time.hour, minute=dep_time.minute, second=0, microsecond=0)
+            if now_tw < dep_datetime + datetime.timedelta(minutes=15):
+                continue
+            
+            # Check Idempotency
+            log_exists = db.query(models.NotificationLog).filter(
+                models.NotificationLog.student_id == s.id,
+                models.NotificationLog.notification_type == "missing_departure",
+                models.NotificationLog.date == today_date_str
+            ).first()
+            
+            if log_exists:
+                continue
+                
             last_att = db.query(Attendance).filter(
                 Attendance.student_id == s.id,
                 Attendance.timestamp >= today_start
@@ -169,24 +234,54 @@ def check_missing_departure():
                 if s.parent and s.parent.is_bound and s.parent.line_user_id:
                     with ApiClient(configuration) as api_client:
                         line_bot_api = MessagingApi(api_client)
-                        msg_text = f"【防走失警示】\n⚠️ 您的孩子 {s.name} 今天已進班，但至今(22:00)尚未有離班打卡紀錄。\n請留意孩子是否還在班上或忘記打卡。"
+                        msg_text = f"【防走失警示】\n⚠️ 您的孩子 {s.name} 今天已進班，表定於 {dep_time.strftime('%H:%M')} 放學，但至今尚未有離班打卡紀錄。\n請留意孩子是否還在班上或忘記打卡。"
                         push_req = PushMessageRequest(
                             to=s.parent.line_user_id,
                             messages=[TextMessage(text=msg_text)]
                         )
                         line_bot_api.push_message(push_req)
+                    
+                    # Record log
+                    new_log = models.NotificationLog(
+                        student_id=s.id,
+                        notification_type="missing_departure",
+                        date=today_date_str
+                    )
+                    db.add(new_log)
+                    db.commit()
+        return {"status": "success"}
     except Exception as e:
         logger.error(f"Error in check_missing_departure: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()
 
-def send_daily_summary():
-    logger.info("Running send_daily_summary...")
+@app.post("/api/cron/send_daily_summary")
+def send_daily_summary(token: str = Depends(verify_cron_token)):
+    logger.info("Running external cron send_daily_summary...")
     db = SessionLocal()
     try:
-        today_start = datetime.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        now_utc = datetime.datetime.utcnow()
+        now_tw = now_utc + datetime.timedelta(hours=8)
+        today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_date_str = now_tw.strftime('%Y-%m-%d')
+        
         parents = db.query(Parent).filter(Parent.is_bound == True, Parent.line_user_id != None).all()
         for p in parents:
+            # Check Idempotency
+            if not p.students:
+                continue
+                
+            first_student_id = p.students[0].id
+            log_exists = db.query(models.NotificationLog).filter(
+                models.NotificationLog.student_id == first_student_id,
+                models.NotificationLog.notification_type == "daily_summary",
+                models.NotificationLog.date == today_date_str
+            ).first()
+            
+            if log_exists:
+                continue
+                
             summary_lines = []
             for s in p.students:
                 atts = db.query(Attendance).filter(
@@ -209,8 +304,19 @@ def send_daily_summary():
                         messages=[TextMessage(text=msg_text)]
                     )
                     line_bot_api.push_message(push_req)
+                
+                # Record log using first student id
+                new_log = models.NotificationLog(
+                    student_id=first_student_id,
+                    notification_type="daily_summary",
+                    date=today_date_str
+                )
+                db.add(new_log)
+                db.commit()
+        return {"status": "success"}
     except Exception as e:
         logger.error(f"Error in send_daily_summary: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()
 
@@ -361,16 +467,36 @@ def request_otp(req: schemas.OTPRequest, db: Session = Depends(get_db)):
     if not parent:
         raise HTTPException(status_code=404, detail="找不到該手機號碼，請確認是否為註冊家長")
     
-    mock_otp = "123456"
-    MOCK_OTP_DB[req.phone_number] = mock_otp
+    import random
+    mock_otp = f"{random.randint(0, 999999):06d}"
+    expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=5)
+    
+    MOCK_OTP_DB[req.phone_number] = {
+        "otp": mock_otp,
+        "expires_at": expires_at,
+        "attempts": 0
+    }
     logger.info(f"Generated OTP {mock_otp} for {req.phone_number}")
     return {"status": "success", "mock_otp": mock_otp}
 
 @app.post("/api/bind")
 def bind_account(req: schemas.BindRequest, db: Session = Depends(get_db)):
-    stored_otp = MOCK_OTP_DB.get(req.phone_number)
-    if not stored_otp or stored_otp != req.otp:
-        raise HTTPException(status_code=400, detail="驗證碼錯誤或已失效")
+    stored_data = MOCK_OTP_DB.get(req.phone_number)
+    
+    if not stored_data:
+        raise HTTPException(status_code=400, detail="無效的驗證碼或驗證碼已過期")
+        
+    if datetime.datetime.utcnow() > stored_data["expires_at"]:
+        del MOCK_OTP_DB[req.phone_number]
+        raise HTTPException(status_code=400, detail="驗證碼已失效，請重新取得")
+        
+    stored_data["attempts"] += 1
+    if stored_data["attempts"] > 5:
+        del MOCK_OTP_DB[req.phone_number]
+        raise HTTPException(status_code=400, detail="錯誤次數過多，驗證碼已失效")
+        
+    if stored_data["otp"] != req.otp:
+        raise HTTPException(status_code=400, detail=f"驗證碼錯誤 (剩餘 {5 - stored_data['attempts']} 次機會)")
     
     parent = db.query(Parent).filter(Parent.phone_number == req.phone_number).first()
     if not parent:
@@ -414,13 +540,22 @@ def push_arrival(req: schemas.PushMessageReq, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="推播失敗")
 
 @app.post("/api/swipe")
-def swipe_card(req: schemas.SwipeRequest, db: Session = Depends(get_db)):
+def swipe_card(req: schemas.SwipeRequest, db: Session = Depends(get_db), token: str = Depends(verify_kiosk_token)):
     student = db.query(Student).filter(Student.card_number == req.card_number).first()
     if not student:
         raise HTTPException(status_code=404, detail="找不到該感應卡號")
+        
+    # Parse timestamp if offline mode
+    if req.offline_timestamp:
+        try:
+            swipe_time = datetime.datetime.fromisoformat(req.offline_timestamp.replace("Z", "+00:00")).astimezone(datetime.timezone.utc).replace(tzinfo=None)
+        except Exception:
+            swipe_time = datetime.datetime.utcnow()
+    else:
+        swipe_time = datetime.datetime.utcnow()
     
     # Check latest attendance for today
-    today_start = datetime.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = swipe_time.replace(hour=0, minute=0, second=0, microsecond=0)
     last_attendance = db.query(Attendance)\
         .filter(Attendance.student_id == student.id, Attendance.timestamp >= today_start)\
         .order_by(Attendance.timestamp.desc()).first()
@@ -430,16 +565,29 @@ def swipe_card(req: schemas.SwipeRequest, db: Session = Depends(get_db)):
     else:
         new_status = "已進班"
         
-    new_record = Attendance(student_id=student.id, status=new_status)
+    new_record = Attendance(student_id=student.id, status=new_status, timestamp=swipe_time)
     db.add(new_record)
     db.commit()
     
-    # 移除即時推播，轉為純查詢制與批次通知模式
+    # Phase 3: Push immediate notification for Arrival
+    if new_status == "已進班" and student.parent and student.parent.is_bound and student.parent.line_user_id:
+        try:
+            tw_time = (swipe_time + datetime.timedelta(hours=8)).strftime('%H:%M')
+            msg_text = f"【到班通知】\n✅ 您的孩子 {student.name} 已於 {tw_time} 抵達補習班。"
+            with ApiClient(configuration) as api_client:
+                line_bot_api = MessagingApi(api_client)
+                push_req = PushMessageRequest(
+                    to=student.parent.line_user_id,
+                    messages=[TextMessage(text=msg_text)]
+                )
+                line_bot_api.push_message(push_req)
+        except Exception as e:
+            logger.error(f"Error pushing arrival notification: {e}")
     
     return {"status": "success", "student_name": student.name, "new_status": new_status}
 
 @app.get("/api/attendance/today")
-def get_today_attendance(db: Session = Depends(get_db)):
+def get_today_attendance(db: Session = Depends(get_db), token: str = Depends(verify_kiosk_token)):
     today_start = datetime.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     
     records = db.query(Attendance, Student.name, Student.student_number)\
@@ -465,12 +613,13 @@ def get_today_attendance(db: Session = Depends(get_db)):
     return result
 
 @app.post("/api/sync-excel")
-def api_sync_excel():
-    p_count, s_count = sync_excel_to_db()
+async def api_sync_excel(file: UploadFile = File(...), token: str = Depends(verify_admin_token)):
+    content = await file.read()
+    p_count, s_count = sync_excel_to_db_from_file(content)
     return {"status": "success", "parents_updated": p_count, "students_updated": s_count}
 
 @app.post("/api/attendance/export")
-def export_attendance(db: Session = Depends(get_db)):
+def api_export_attendance(db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
     today_start = datetime.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     
     records = db.query(Attendance, Student.name, Student.student_number)\
@@ -493,13 +642,13 @@ def export_attendance(db: Session = Depends(get_db)):
     date_str = (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime('%Y-%m-%d')
     file_name = f"{date_str}_出勤紀錄.xlsx"
     
-    # 確保 excels/Students 目錄存在
-    export_dir = os.path.join("excels", "Students")
-    os.makedirs(export_dir, exist_ok=True)
+    # Phase 4: Stateless Memory Stream (io.BytesIO)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='出勤紀錄')
     
-    file_path = os.path.join(export_dir, file_name)
-    
-    df.to_excel(file_path, index=False)
-    
-    # Return success message instead of downloading
-    return {"status": "success", "detail": f"報表已儲存至 {file_path}", "file_name": file_name}
+    output.seek(0)
+    headers = {
+        'Content-Disposition': f'attachment; filename="{file_name}"'
+    }
+    return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
