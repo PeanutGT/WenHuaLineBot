@@ -14,7 +14,8 @@ from linebot.v3.messaging import (
     RichMenuArea,
     RichMenuBounds,
     RichMenuSize,
-    MessageAction
+    MessageAction,
+    URIAction
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -23,47 +24,51 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 channel_access_token = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
+liff_url = os.getenv('LIFF_URL', 'https://liff.line.me/YOUR_LIFF_ID')
+
 if not channel_access_token:
     logger.error("Missing LINE_CHANNEL_ACCESS_TOKEN")
     sys.exit(1)
 
 configuration = Configuration(access_token=channel_access_token)
 
-def generate_simple_menu_image():
+def generate_split_menu_image():
     width, height = 2500, 1686
-    # 現代感的深色背景與亮藍色文字 (對應網頁版設計)
     bg_color = (15, 23, 42) 
     text_color = (56, 189, 248)
     
     img = Image.new('RGB', (width, height), color=bg_color)
     d = ImageDraw.Draw(img)
     
-    # 嘗試載入微軟正黑體以支援中文
     try:
-        font = ImageFont.truetype("C:\\Windows\\Fonts\\msjh.ttc", 240)
+        font = ImageFont.truetype("C:\\Windows\\Fonts\\msjh.ttc", 200)
     except:
-        try:
-            font = ImageFont.truetype("C:\\Windows\\Fonts\\mingliu.ttc", 240)
-        except:
-            font = ImageFont.load_default()
+        font = ImageFont.load_default()
             
-    text = "查詢孩子資料"
+    # Left Side: Bind Account
+    text1 = "1. 綁定身分"
+    bbox1 = d.textbbox((0, 0), text1, font=font)
+    text_w1 = bbox1[2] - bbox1[0]
+    text_h1 = bbox1[3] - bbox1[1]
+    x1 = (width / 2 - text_w1) / 2
+    y1 = (height - text_h1) / 2
+    d.text((x1, y1), text1, font=font, fill=text_color)
     
-    # 計算文字置中位置
-    bbox = d.textbbox((0, 0), text, font=font)
-    text_w = bbox[2] - bbox[0]
-    text_h = bbox[3] - bbox[1]
+    # Right Side: Query Info
+    text2 = "2. 查詢出勤"
+    bbox2 = d.textbbox((0, 0), text2, font=font)
+    text_w2 = bbox2[2] - bbox2[0]
+    text_h2 = bbox2[3] - bbox2[1]
+    x2 = width / 2 + (width / 2 - text_w2) / 2
+    y2 = (height - text_h2) / 2
+    d.text((x2, y2), text2, font=font, fill=text_color)
     
-    x = (width - text_w) / 2
-    y = (height - text_h) / 2
+    # Center Divider
+    d.line([(width/2, 100), (width/2, height-100)], fill=text_color, width=10)
     
-    # 畫出文字
-    d.text((x, y), text, font=font, fill=text_color)
-    
-    # 畫一個外框增加點擊感
+    # Outer Border
     d.rectangle([(80, 80), (width-80, height-80)], outline=text_color, width=15)
     
-    # 存入 BytesIO
     img_byte_arr = BytesIO()
     img.save(img_byte_arr, format='JPEG')
     return img_byte_arr.getvalue()
@@ -75,28 +80,29 @@ def create_and_set_rich_menu():
         
         logger.info("Initializing Rich Menu configuration...")
         
-        # 1. 定義圖文選單
         rich_menu = RichMenuRequest(
             size=RichMenuSize(width=2500, height=1686),
             selected=True,
-            name="Main Menu Simple",
+            name="Main Menu Split",
             chat_bar_text="智慧親師通",
             areas=[
                 RichMenuArea(
-                    bounds=RichMenuBounds(x=0, y=0, width=2500, height=1686),
+                    bounds=RichMenuBounds(x=0, y=0, width=1250, height=1686),
+                    action=URIAction(type="uri", uri=liff_url)
+                ),
+                RichMenuArea(
+                    bounds=RichMenuBounds(x=1250, y=0, width=1250, height=1686),
                     action=MessageAction(type="message", text="查詢孩子資料")
                 )
             ]
         )
         
-        # 2. 建立 Rich Menu 並取得 ID
         response = line_bot_api.create_rich_menu(rich_menu)
         menu_id = response.rich_menu_id
         logger.info(f"Created Rich Menu ID: {menu_id}")
         
-        # 3. 生成簡約文字圖片並上傳
         try:
-            img_bytes = generate_simple_menu_image()
+            img_bytes = generate_split_menu_image()
             
             logger.info("Uploading image to LINE...")
             line_bot_blob_api.set_rich_menu_image(
@@ -104,13 +110,11 @@ def create_and_set_rich_menu():
                 body=img_bytes,
                 _headers={'Content-Type': 'image/jpeg'}
             )
-            logger.info("Image uploaded successfully!")
             
-            # 4. 設為官方帳號的預設圖文選單
             line_bot_api.set_default_rich_menu(menu_id)
-            logger.info("Rich Menu is now set as DEFAULT for all users!")
+            logger.info("Rich Menu successfully deployed with LIFF bindings!")
         except Exception as e:
-            logger.error(f"Failed to set rich menu image or default: {e}", exc_info=True)
+            logger.error(f"Failed to set rich menu: {e}", exc_info=True)
 
 if __name__ == "__main__":
     create_and_set_rich_menu()

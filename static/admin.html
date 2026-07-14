@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智慧親師通 - 補習班後台管理</title>
+    <style>
+        :root {
+            --primary: #4F46E5;
+            --primary-hover: #4338CA;
+            --bg-color: #F3F4F6;
+            --card-bg: #FFFFFF;
+            --text-main: #1F2937;
+            --text-muted: #6B7280;
+            --border-color: #E5E7EB;
+            --success: #10B981;
+            --error: #EF4444;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+            padding: 32px;
+            margin-bottom: 24px;
+            transition: transform 0.2s;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 24px;
+            margin-top: 0;
+            margin-bottom: 8px;
+            color: var(--primary);
+        }
+
+        p.subtitle {
+            text-align: center;
+            color: var(--text-muted);
+            margin-bottom: 32px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        input[type="password"], input[type="file"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-sizing: border-box;
+            font-size: 16px;
+            transition: border-color 0.2s;
+        }
+
+        input[type="password"]:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        button.btn-success {
+            background-color: var(--success);
+        }
+        
+        button.btn-success:hover {
+            background-color: #059669;
+        }
+
+        .status-message {
+            margin-top: 16px;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .status-message.success {
+            display: block;
+            background-color: #ECFDF5;
+            color: #065F46;
+            border: 1px solid #A7F3D0;
+        }
+
+        .status-message.error {
+            display: block;
+            background-color: #FEF2F2;
+            color: #991B1B;
+            border: 1px solid #FECACA;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* Loading spinner */
+        .loader {
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top: 3px solid white;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+            display: none;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    
+    <!-- Login Section -->
+    <div class="card" id="loginSection">
+        <h1>後台管理系統登入</h1>
+        <p class="subtitle">請輸入您的管理員密碼 (ADMIN_TOKEN)</p>
+        
+        <div class="form-group">
+            <input type="password" id="adminToken" placeholder="輸入密碼..." autocomplete="current-password">
+        </div>
+        <button id="loginBtn">登入系統</button>
+        <div id="loginStatus" class="status-message"></div>
+    </div>
+
+    <!-- Dashboard Section (Hidden by default) -->
+    <div id="dashboardSection" class="hidden">
+        
+        <!-- Upload Section -->
+        <div class="card">
+            <h1>📥 匯入學生名單</h1>
+            <p class="subtitle">請上傳包含「學號、姓名、卡號、簡訊電話1/媽媽手機/爸爸手機」的 Excel 檔案</p>
+            
+            <div class="form-group">
+                <input type="file" id="excelFile" accept=".xlsx, .xls">
+            </div>
+            <button id="uploadBtn">
+                <span class="loader" id="uploadLoader"></span> 上傳並同步資料庫
+            </button>
+            <div id="uploadStatus" class="status-message"></div>
+        </div>
+
+        <!-- Export Section -->
+        <div class="card">
+            <h1>📤 匯出今日出勤紀錄</h1>
+            <p class="subtitle">下載當日所有學生的「進班/離班」打卡明細</p>
+            
+            <button id="exportBtn" class="btn-success">下載 Excel 報表</button>
+            <div id="exportStatus" class="status-message"></div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    let currentToken = '';
+
+    const loginSection = document.getElementById('loginSection');
+    const dashboardSection = document.getElementById('dashboardSection');
+    const adminTokenInput = document.getElementById('adminToken');
+    const loginBtn = document.getElementById('loginBtn');
+    const loginStatus = document.getElementById('loginStatus');
+
+    const excelFile = document.getElementById('excelFile');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const uploadLoader = document.getElementById('uploadLoader');
+    const uploadStatus = document.getElementById('uploadStatus');
+
+    const exportBtn = document.getElementById('exportBtn');
+    const exportStatus = document.getElementById('exportStatus');
+
+    function showStatus(element, message, isError = false) {
+        element.textContent = message;
+        element.className = 'status-message ' + (isError ? 'error' : 'success');
+    }
+
+    loginBtn.addEventListener('click', () => {
+        const token = adminTokenInput.value.trim();
+        if (!token) {
+            showStatus(loginStatus, '請輸入密碼！', true);
+            return;
+        }
+        currentToken = token;
+        
+        loginSection.classList.add('hidden');
+        dashboardSection.classList.remove('hidden');
+    });
+
+    adminTokenInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') loginBtn.click();
+    });
+
+    uploadBtn.addEventListener('click', async () => {
+        const file = excelFile.files[0];
+        if (!file) {
+            showStatus(uploadStatus, '請先選擇一個 Excel 檔案！', true);
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        uploadBtn.disabled = true;
+        uploadLoader.style.display = 'inline-block';
+        uploadStatus.className = 'status-message'; // hide previous
+
+        try {
+            const response = await fetch('/api/sync-excel', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${currentToken}`
+                },
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.detail || '上傳失敗或密碼錯誤');
+            }
+
+            const result = await response.json();
+            showStatus(uploadStatus, `✅ 同步成功！新增/更新家長 ${result.parents_updated} 筆，學生 ${result.students_updated} 筆。`, false);
+            excelFile.value = ''; // clear input
+        } catch (error) {
+            showStatus(uploadStatus, '❌ ' + error.message, true);
+        } finally {
+            uploadBtn.disabled = false;
+            uploadLoader.style.display = 'none';
+        }
+    });
+
+    exportBtn.addEventListener('click', async () => {
+        exportBtn.disabled = true;
+        exportStatus.className = 'status-message';
+
+        try {
+            const response = await fetch('/api/attendance/export', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${currentToken}`
+                }
+            });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.detail || '下載失敗或密碼錯誤');
+            }
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            
+            const disposition = response.headers.get('Content-Disposition');
+            let filename = '出勤紀錄.xlsx';
+            if (disposition && disposition.indexOf('filename=') !== -1) {
+                const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                const matches = filenameRegex.exec(disposition);
+                if (matches != null && matches[1]) { 
+                    filename = matches[1].replace(/['"]/g, '');
+                }
+            }
+            
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            
+            showStatus(exportStatus, '✅ 下載成功！', false);
+        } catch (error) {
+            showStatus(exportStatus, '❌ ' + error.message, true);
+        } finally {
+            exportBtn.disabled = false;
+        }
+    });
+
+</script>
+
+</body>
+</html>

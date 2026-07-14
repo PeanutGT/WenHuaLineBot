@@ -433,54 +433,11 @@ def handle_message(event):
         else:
             logger.info(f"Received unknown message from {user_id}: {text}")
 
-@app.post("/api/otp/request")
-def request_otp(req: schemas.OTPRequest, db: Session = Depends(get_db)):
-    parent = db.query(Parent).filter(Parent.phone_number == req.phone_number).first()
-    if not parent:
-        raise HTTPException(status_code=404, detail="找不到該手機號碼，請確認是否為註冊家長")
-    
-    import random
-    mock_otp = f"{random.randint(0, 999999):06d}"
-    expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=5)
-    
-    otp_record = db.query(models.OtpRecord).filter(models.OtpRecord.phone_number == req.phone_number).first()
-    if otp_record:
-        otp_record.otp = mock_otp
-        otp_record.expires_at = expires_at
-        otp_record.attempts = 0
-    else:
-        otp_record = models.OtpRecord(phone_number=req.phone_number, otp=mock_otp, expires_at=expires_at)
-        db.add(otp_record)
-        
-    db.commit()
-    
-    # [TODO] 實作真實簡訊閘道呼叫，例如三竹簡訊或 Twilio
-    # def send_sms(phone, msg): ...
-    logger.info(f"== [SMS MOCK] 向 {req.phone_number} 發送簡訊 OTP: {mock_otp} ==")
-    
-    return {"status": "success", "detail": "驗證碼已發送"}
+    # OTP Functionality removed per user request
 
 @app.post("/api/bind")
 def bind_account(req: schemas.BindRequest, db: Session = Depends(get_db)):
-    otp_record = db.query(models.OtpRecord).filter(models.OtpRecord.phone_number == req.phone_number).first()
-    
-    if not otp_record:
-        raise HTTPException(status_code=400, detail="無效的驗證碼或驗證碼已過期")
-        
-    if datetime.datetime.utcnow() > otp_record.expires_at:
-        db.delete(otp_record)
-        db.commit()
-        raise HTTPException(status_code=400, detail="驗證碼已失效，請重新取得")
-        
-    otp_record.attempts += 1
-    if otp_record.attempts > 5:
-        db.delete(otp_record)
-        db.commit()
-        raise HTTPException(status_code=400, detail="錯誤次數過多，驗證碼已失效")
-        
-    if otp_record.otp != req.otp:
-        db.commit()
-        raise HTTPException(status_code=400, detail=f"驗證碼錯誤 (剩餘 {5 - otp_record.attempts} 次機會)")
+    # Simplified binding: Verify parent exists only based on phone_number
     
     parent = db.query(Parent).filter(Parent.phone_number == req.phone_number).first()
     if not parent:
@@ -496,7 +453,6 @@ def bind_account(req: schemas.BindRequest, db: Session = Depends(get_db)):
     parent.line_user_id = req.line_user_id
     parent.is_bound = True
     parent.bound_at = datetime.datetime.utcnow()
-    db.delete(otp_record)
     db.commit()
     
     return {"status": "success", "detail": "綁定成功"}

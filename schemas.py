@@ -1,11 +1,7 @@
 from pydantic import BaseModel
 
-class OTPRequest(BaseModel):
-    phone_number: str
-
 class BindRequest(BaseModel):
     phone_number: str
-    otp: str
     line_user_id: str
 
 class PushMessageReq(BaseModel):
