@@ -4,6 +4,7 @@ import logging
 import io
 import secrets
 import re
+from typing import List
 from fastapi import FastAPI, Request, HTTPException, Depends, Header, status, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
@@ -451,7 +452,7 @@ def handle_message(event):
 
     # OTP Functionality removed per user request
 
-@app.get("/api/groups", response_model=list[schemas.GroupResponse])
+@app.get("/api/groups", response_model=List[schemas.GroupResponse])
 def get_groups(db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
     groups = db.query(models.Group).filter(models.Group.is_active == True).all()
     return groups
