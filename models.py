@@ -67,5 +67,16 @@ class Attendance(Base):
     student_id = Column(Integer, ForeignKey("students.id"))
     status = Column(String, nullable=False) # "已進班" or "已離班"
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    client_swipe_id = Column(String, index=True, nullable=True)
 
     student = relationship("Student", back_populates="attendances")
+
+class OtpRecord(Base):
+    __tablename__ = "otp_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    phone_number = Column(String, unique=True, index=True, nullable=False)
+    otp = Column(String, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    attempts = Column(Integer, default=0)
+

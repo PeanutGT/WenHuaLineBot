@@ -1,6 +1,8 @@
 import os
 import sys
 import logging
+import io
+import secrets
 from fastapi import FastAPI, Request, HTTPException, Depends, Header, status, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
@@ -22,17 +24,25 @@ from fastapi.staticfiles import StaticFiles
 import datetime
 from linebot.v3.messaging import PushMessageRequest, TextMessage
 import pandas as pd
-from linebot.v3.messaging import PushMessageRequest, TextMessage
-import pandas as pd
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Determine execution context
+if getattr(sys, 'frozen', False):
+    # PyInstaller executable
+    app_dir = os.path.dirname(sys.executable)
+    static_dir = sys._MEIPASS
+else:
+    # Normal Python script
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    static_dir = app_dir
+
 # Phase 1: Create database tables if they don't exist
 Base.metadata.create_all(bind=engine)
 
-load_dotenv()
+load_dotenv(os.path.join(app_dir, ".env"))
 
 # Phase 2: LINE Bot Configuration
 channel_secret = os.getenv('LINE_CHANNEL_SECRET')
@@ -51,20 +61,23 @@ KIOSK_TOKEN = os.getenv("KIOSK_TOKEN")
 
 security = HTTPBearer()
 
-def verify_kiosk_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    if credentials.credentials != KIOSK_TOKEN:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Kiosk Token")
-    return credentials.credentials
+class TokenVerifier:
+    def __init__(self, expected_token: str, token_name: str):
+        self.expected_token = expected_token
+        self.token_name = token_name
 
-def verify_admin_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    if credentials.credentials != ADMIN_TOKEN:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Admin Token")
-    return credentials.credentials
+    def __call__(self, credentials: HTTPAuthorizationCredentials = Depends(security)):
+        if not self.expected_token or not secrets.compare_digest(credentials.credentials, self.expected_token):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid {self.token_name} Token")
+        return credentials.credentials
 
-def verify_cron_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    if credentials.credentials != CRON_TOKEN:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Cron Token")
-    return credentials.credentials
+verify_kiosk_token = TokenVerifier(KIOSK_TOKEN, "Kiosk")
+verify_admin_token = TokenVerifier(ADMIN_TOKEN, "Admin")
+verify_cron_token = TokenVerifier(CRON_TOKEN, "Cron")
+
+def get_tw_now() -> datetime.datetime:
+    """Returns the current time in Taiwan (UTC+8) as a naive datetime object."""
+    return datetime.datetime.utcnow() + datetime.timedelta(hours=8)
 
 handler = WebhookHandler(channel_secret)
 
@@ -74,18 +87,20 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Phase 4: Zero Trust CORS Middleware
+# Phase 4 & 5: Zero Trust CORS Middleware with whitelist
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Should be restricted to ngrok domains in production
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Mount static files
-app.mount("/liff", StaticFiles(directory="liff"), name="liff")
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/liff", StaticFiles(directory=os.path.join(static_dir, "liff")), name="liff")
+app.mount("/static", StaticFiles(directory=os.path.join(static_dir, "static")), name="static")
 
 def clean_phone(val):
     if pd.isna(val):
@@ -103,21 +118,23 @@ def clean_phone(val):
         if len(s) == 9 and s.startswith('9'):
             return '0' + s
         return s
-    except:
+    except Exception:
         return None
 
 # Use UploadFile in the API endpoint instead of reading from disk
 def sync_excel_to_db_from_file(file_content: bytes):
     logger.info("Starting stateless Excel sync...")
-    import io
     try:
         db = SessionLocal()
         df = pd.read_excel(io.BytesIO(file_content))
         
         parents_updated = 0
         students_updated = 0
+        skipped = []
         
         for index, row in df.iterrows():
+            row_idx = index + 2 # Excel is 1-indexed, plus header
+            
             # Handle student number (might be float in pandas)
             raw_sn = row.get('學號')
             if pd.notna(raw_sn):
@@ -141,6 +158,11 @@ def sync_excel_to_db_from_file(file_content: bytes):
                 phone = clean_phone(row.get('爸爸手機'))
                 
             if not student_number or not student_name or not phone:
+                reason = []
+                if not student_number: reason.append("缺少學號")
+                if not student_name: reason.append("缺少姓名")
+                if not phone: reason.append("手機號碼無效或缺失")
+                skipped.append({"row": row_idx, "name": student_name or "(未知)", "reason": "、".join(reason)})
                 continue
                 
             # 確保家長存在並更新名稱 (若有改變)
@@ -174,23 +196,22 @@ def sync_excel_to_db_from_file(file_content: bytes):
                     
         db.commit()
         db.close()
-        logger.info(f"Excel sync completed! Parents created/updated: {parents_updated}, Students created/updated: {students_updated}.")
-        return parents_updated, students_updated
+        logger.info(f"Excel sync completed! Parents created/updated: {parents_updated}, Students created/updated: {students_updated}. Skipped: {len(skipped)}")
+        return parents_updated, students_updated, skipped
     except Exception as e:
         logger.error(f"Error during Excel sync: {e}")
-        return 0, 0
+        return 0, 0, []
 
 @app.on_event("startup")
 def startup_event():
     logger.info("Startup complete. Cron scheduling is now externalized.")
 
 @app.post("/api/cron/check_missing_departure")
-def check_missing_departure(token: str = Depends(verify_cron_token)):
+def check_missing_departure(db: Session = Depends(get_db), token: str = Depends(verify_cron_token)):
     logger.info("Running external cron check_missing_departure...")
-    db = SessionLocal()
     try:
         now_utc = datetime.datetime.utcnow()
-        now_tw = now_utc + datetime.timedelta(hours=8)
+        now_tw = get_tw_now()
         today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
         today_date_str = now_tw.strftime('%Y-%m-%d')
         day_of_week = now_tw.weekday()
@@ -253,16 +274,13 @@ def check_missing_departure(token: str = Depends(verify_cron_token)):
     except Exception as e:
         logger.error(f"Error in check_missing_departure: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        db.close()
 
 @app.post("/api/cron/send_daily_summary")
-def send_daily_summary(token: str = Depends(verify_cron_token)):
+def send_daily_summary(db: Session = Depends(get_db), token: str = Depends(verify_cron_token)):
     logger.info("Running external cron send_daily_summary...")
-    db = SessionLocal()
     try:
         now_utc = datetime.datetime.utcnow()
-        now_tw = now_utc + datetime.timedelta(hours=8)
+        now_tw = get_tw_now()
         today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
         today_date_str = now_tw.strftime('%Y-%m-%d')
         
@@ -317,11 +335,7 @@ def send_daily_summary(token: str = Depends(verify_cron_token)):
     except Exception as e:
         logger.error(f"Error in send_daily_summary: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        db.close()
 
-# Mock OTP Storage
-MOCK_OTP_DB = {}
 
 @app.post("/webhook")
 async def callback(request: Request, x_line_signature: str = Header(None)):
@@ -401,51 +415,11 @@ def handle_message(event):
             parts = text.split()
             db = SessionLocal()
             try:
-                if len(parts) < 3:
-                    reply_text = (
-                        "【智慧親師通 - 格式錯誤】\n"
-                        "❌ 綁定指令格式有誤。\n\n"
-                        "請輸入完整的指令，例如：\n"
-                        "綁定 王小明 0912345678"
-                    )
-                else:
-                    phone = parts[-1]
-                    student_name = " ".join(parts[1:-1])
-                    
-                    # Find the student
-                    student = db.query(Student).filter(Student.name == student_name).first()
-                    if not student:
-                        reply_text = (
-                            "【智慧親師通 - 綁定失敗】\n"
-                            f"❌ 系統查無名為「{student_name}」的學生資料。\n\n"
-                            "請確認您輸入的學生姓名是否與本班登記之資料完全相符，或洽詢櫃台人員協助。"
-                        )
-                    else:
-                        parent = student.parent
-                        if not parent or parent.phone_number != phone:
-                            reply_text = (
-                                "【智慧親師通 - 綁定失敗】\n"
-                                "❌ 身分驗證失敗！\n\n"
-                                "您輸入的手機號碼與該名學生登記的家長聯絡電話不相符，基於資安考量無法為您綁定。若有疑問請聯繫櫃台更新資料。"
-                            )
-                        else:
-                            # Clear old binding for this LINE user if any
-                            old_parent = db.query(Parent).filter(Parent.line_user_id == user_id).first()
-                            if old_parent and old_parent.id != parent.id:
-                                old_parent.is_bound = False
-                                old_parent.line_user_id = None
-                                old_parent.bound_at = None
-                                
-                            parent.line_user_id = user_id
-                            parent.is_bound = True
-                            parent.bound_at = datetime.datetime.utcnow()
-                            db.commit()
-                            
-                            reply_text = (
-                                "【智慧親師通 - 綁定成功】\n"
-                                f"✅ 已成功為您綁定學生「{student.name}」之親屬身分。\n\n"
-                                "您現在可隨時點擊下方選單查詢出勤狀態，系統亦將於學生進退班時，自動發送推播通知給您。"
-                            )
+                reply_text = (
+                    "【智慧親師通 - 系統升級公告】\n"
+                    "🔒 為保障您的資料安全，我們已全面升級為「LIFF 網頁安全綁定」系統。\n\n"
+                    "請勿在此直接輸入綁定資訊。請點擊下方的「選單」，選擇「綁定身分」進行簡訊驗證綁定手續。"
+                )
                 line_bot_api.reply_message(
                     ReplyMessageRequest(
                         reply_token=event.reply_token,
@@ -459,8 +433,6 @@ def handle_message(event):
         else:
             logger.info(f"Received unknown message from {user_id}: {text}")
 
-# --- Phase 3 & 4 APIs ---
-
 @app.post("/api/otp/request")
 def request_otp(req: schemas.OTPRequest, db: Session = Depends(get_db)):
     parent = db.query(Parent).filter(Parent.phone_number == req.phone_number).first()
@@ -471,32 +443,44 @@ def request_otp(req: schemas.OTPRequest, db: Session = Depends(get_db)):
     mock_otp = f"{random.randint(0, 999999):06d}"
     expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=5)
     
-    MOCK_OTP_DB[req.phone_number] = {
-        "otp": mock_otp,
-        "expires_at": expires_at,
-        "attempts": 0
-    }
-    logger.info(f"Generated OTP {mock_otp} for {req.phone_number}")
-    return {"status": "success", "mock_otp": mock_otp}
+    otp_record = db.query(models.OtpRecord).filter(models.OtpRecord.phone_number == req.phone_number).first()
+    if otp_record:
+        otp_record.otp = mock_otp
+        otp_record.expires_at = expires_at
+        otp_record.attempts = 0
+    else:
+        otp_record = models.OtpRecord(phone_number=req.phone_number, otp=mock_otp, expires_at=expires_at)
+        db.add(otp_record)
+        
+    db.commit()
+    
+    # [TODO] 實作真實簡訊閘道呼叫，例如三竹簡訊或 Twilio
+    # def send_sms(phone, msg): ...
+    logger.info(f"== [SMS MOCK] 向 {req.phone_number} 發送簡訊 OTP: {mock_otp} ==")
+    
+    return {"status": "success", "detail": "驗證碼已發送"}
 
 @app.post("/api/bind")
 def bind_account(req: schemas.BindRequest, db: Session = Depends(get_db)):
-    stored_data = MOCK_OTP_DB.get(req.phone_number)
+    otp_record = db.query(models.OtpRecord).filter(models.OtpRecord.phone_number == req.phone_number).first()
     
-    if not stored_data:
+    if not otp_record:
         raise HTTPException(status_code=400, detail="無效的驗證碼或驗證碼已過期")
         
-    if datetime.datetime.utcnow() > stored_data["expires_at"]:
-        del MOCK_OTP_DB[req.phone_number]
+    if datetime.datetime.utcnow() > otp_record.expires_at:
+        db.delete(otp_record)
+        db.commit()
         raise HTTPException(status_code=400, detail="驗證碼已失效，請重新取得")
         
-    stored_data["attempts"] += 1
-    if stored_data["attempts"] > 5:
-        del MOCK_OTP_DB[req.phone_number]
+    otp_record.attempts += 1
+    if otp_record.attempts > 5:
+        db.delete(otp_record)
+        db.commit()
         raise HTTPException(status_code=400, detail="錯誤次數過多，驗證碼已失效")
         
-    if stored_data["otp"] != req.otp:
-        raise HTTPException(status_code=400, detail=f"驗證碼錯誤 (剩餘 {5 - stored_data['attempts']} 次機會)")
+    if otp_record.otp != req.otp:
+        db.commit()
+        raise HTTPException(status_code=400, detail=f"驗證碼錯誤 (剩餘 {5 - otp_record.attempts} 次機會)")
     
     parent = db.query(Parent).filter(Parent.phone_number == req.phone_number).first()
     if not parent:
@@ -512,10 +496,8 @@ def bind_account(req: schemas.BindRequest, db: Session = Depends(get_db)):
     parent.line_user_id = req.line_user_id
     parent.is_bound = True
     parent.bound_at = datetime.datetime.utcnow()
+    db.delete(otp_record)
     db.commit()
-    
-    if req.phone_number in MOCK_OTP_DB:
-        del MOCK_OTP_DB[req.phone_number]
     
     return {"status": "success", "detail": "綁定成功"}
 
@@ -545,14 +527,33 @@ def swipe_card(req: schemas.SwipeRequest, db: Session = Depends(get_db), token: 
     if not student:
         raise HTTPException(status_code=404, detail="找不到該感應卡號")
         
+    # Idempotency check
+    if req.client_swipe_id:
+        existing = db.query(Attendance).filter(Attendance.client_swipe_id == req.client_swipe_id).first()
+        if existing:
+            return {"status": "success", "student_name": student.name, "new_status": existing.status, "detail": "已處理過的打卡紀錄"}
+        
     # Parse timestamp if offline mode
+    now = datetime.datetime.utcnow()
+    is_offline_retry = False
+    
     if req.offline_timestamp:
         try:
             swipe_time = datetime.datetime.fromisoformat(req.offline_timestamp.replace("Z", "+00:00")).astimezone(datetime.timezone.utc).replace(tzinfo=None)
-        except Exception:
-            swipe_time = datetime.datetime.utcnow()
+            
+            # Timestamp validation
+            if swipe_time > now + datetime.timedelta(minutes=5):
+                raise HTTPException(status_code=400, detail="無效的時間戳：不能為未來時間")
+            if swipe_time < now - datetime.timedelta(hours=24):
+                raise HTTPException(status_code=400, detail="無效的時間戳：已超過 24 小時")
+                
+            if now - swipe_time > datetime.timedelta(minutes=2):
+                is_offline_retry = True
+                
+        except ValueError:
+            swipe_time = now
     else:
-        swipe_time = datetime.datetime.utcnow()
+        swipe_time = now
     
     # Check latest attendance for today
     today_start = swipe_time.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -565,14 +566,14 @@ def swipe_card(req: schemas.SwipeRequest, db: Session = Depends(get_db), token: 
     else:
         new_status = "已進班"
         
-    new_record = Attendance(student_id=student.id, status=new_status, timestamp=swipe_time)
+    new_record = Attendance(student_id=student.id, status=new_status, timestamp=swipe_time, client_swipe_id=req.client_swipe_id)
     db.add(new_record)
     db.commit()
     
-    # Phase 3: Push immediate notification for Arrival
-    if new_status == "已進班" and student.parent and student.parent.is_bound and student.parent.line_user_id:
+    # Phase 3 & 5: Push immediate notification for Arrival (skip if offline historical retry)
+    if not is_offline_retry and new_status == "已進班" and student.parent and student.parent.is_bound and student.parent.line_user_id:
         try:
-            tw_time = (swipe_time + datetime.timedelta(hours=8)).strftime('%H:%M')
+            tw_time = get_tw_now().strftime('%H:%M')
             msg_text = f"【到班通知】\n✅ 您的孩子 {student.name} 已於 {tw_time} 抵達補習班。"
             with ApiClient(configuration) as api_client:
                 line_bot_api = MessagingApi(api_client)
@@ -615,8 +616,13 @@ def get_today_attendance(db: Session = Depends(get_db), token: str = Depends(ver
 @app.post("/api/sync-excel")
 async def api_sync_excel(file: UploadFile = File(...), token: str = Depends(verify_admin_token)):
     content = await file.read()
-    p_count, s_count = sync_excel_to_db_from_file(content)
-    return {"status": "success", "parents_updated": p_count, "students_updated": s_count}
+    p_count, s_count, skipped = sync_excel_to_db_from_file(content)
+    return {
+        "status": "success", 
+        "parents_updated": p_count, 
+        "students_updated": s_count,
+        "skipped": skipped
+    }
 
 @app.post("/api/attendance/export")
 def api_export_attendance(db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
@@ -639,7 +645,7 @@ def api_export_attendance(db: Session = Depends(get_db), token: str = Depends(ve
         })
         
     df = pd.DataFrame(data)
-    date_str = (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime('%Y-%m-%d')
+    date_str = get_tw_now().strftime('%Y-%m-%d')
     file_name = f"{date_str}_出勤紀錄.xlsx"
     
     # Phase 4: Stateless Memory Stream (io.BytesIO)

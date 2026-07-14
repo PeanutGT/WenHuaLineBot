@@ -259,7 +259,7 @@
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${KIOSK_TOKEN}`
                     },
-                    body: JSON.stringify({ card_number: record.card_number, offline_timestamp: record.timestamp })
+                    body: JSON.stringify({ card_number: record.card_number, offline_timestamp: record.timestamp, client_swipe_id: record.client_swipe_id })
                 });
                 
                 if (response.ok) {
@@ -383,7 +383,12 @@
                     });
                     if (res.ok) {
                         const data = await res.json();
-                        showFeedback(`✅ 同步成功！更新家長：${data.parents_updated}筆，學生：${data.students_updated}筆`, 'success');
+                        let msg = `✅ 同步成功！更新家長：${data.parents_updated}筆，學生：${data.students_updated}筆`;
+                        if (data.skipped && data.skipped.length > 0) {
+                            let skippedStr = data.skipped.map(s => `第${s.row}列 ${s.name}: ${s.reason}`).join("\\n");
+                            alert(`有 ${data.skipped.length} 筆資料因格式錯誤被略過：\\n\\n${skippedStr}`);
+                        }
+                        showFeedback(msg, 'success');
                     } else {
                         showFeedback(`❌ 同步失敗`, 'error');
                     }
@@ -429,6 +434,8 @@
                 isProcessing = true;
                 inputField.disabled = true;
                 
+                const clientSwipeId = Date.now().toString() + "-" + Math.random().toString(36).substring(7);
+                
                 try {
                     const response = await fetch('/api/swipe', {
                         method: 'POST',
@@ -436,7 +443,7 @@
                             'Content-Type': 'application/json',
                             'Authorization': `Bearer ${KIOSK_TOKEN}`
                         },
-                        body: JSON.stringify({ card_number: cardNumber })
+                        body: JSON.stringify({ card_number: cardNumber, client_swipe_id: clientSwipeId })
                     });
                     
                     const data = await response.json();
@@ -456,7 +463,7 @@
                     // Phase 3: Offline mode fallback
                     console.error("Network error, switching to offline queue");
                     const timestamp = new Date().toISOString();
-                    offlineQueue.push({ card_number: cardNumber, timestamp: timestamp });
+                    offlineQueue.push({ card_number: cardNumber, timestamp: timestamp, client_swipe_id: clientSwipeId });
                     saveQueue();
                     
                     showFeedback(`📶 [離線暫存] 卡號 ${cardNumber} 已記錄`, 'success');

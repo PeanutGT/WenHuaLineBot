@@ -15,3 +15,4 @@ class PushMessageReq(BaseModel):
 class SwipeRequest(BaseModel):
     card_number: str
     offline_timestamp: str = None
+    client_swipe_id: str = None

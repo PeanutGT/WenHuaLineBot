@@ -1,96 +1,93 @@
-# 智慧親師通 (Smart School LINE Bot)
+# 智慧親師通系統 (WenHuaLineBot)
 
-這是一套專為補習班/安親班打造的「智慧打卡與家長通知系統」。整合了實體感應卡打卡、自動 Excel 報表結算，以及 LINE Bot 自動推播，協助補習班以最低的成本達成最高效率的數位化管理。
+本專案是一個專為補習班設計的「零信任資安」打卡與家長通知系統。結合了 **Thin Client (純網頁刷卡介面)** 與 **零依賴單一執行檔 (Standalone Executable)** 技術，讓補習班內的老舊電腦無需安裝任何 Python 或伺服器環境，只需「雙擊執行檔」並開啟瀏覽器即可完美運作。
 
-## 🌟 系統特色
+## 🌟 系統亮點
 
-1. **一鍵 Excel 同步**：免去繁瑣的建檔，只要將包含「學號」、「卡號」、「姓名」、「家長手機」的 Excel 檔案放入系統，按下一鍵即可完成數百人的資料庫建立。
-2. **防走失警示**：每日晚上定時巡邏，若學生有進班但未離班，將自動推播警示家長。
-3. **每日出勤批次結算**：將同一家庭一整天的多筆打卡紀錄濃縮成「一封信」發送，極大化節省 LINE 推播費用。
-4. **營業安全控制**：打卡機具備「鎖定」與「解鎖」功能，避免非營業時段的誤刷。
-5. **打烊自動結算**：每日結束營業時，系統自動將今日所有打卡紀錄備份成 Excel 報表供作帳。
-
----
-
-## 💻 系統硬體與環境需求
-
-- **作業系統**：Windows 10 / 11
-- **硬體需求**：一般櫃台行政電腦即可，需具備對外網路連線與 USB 讀卡機/掃描槍。
-- **必備軟體**：[Python 3.10+](https://www.python.org/)、[Ngrok](https://ngrok.com/)。
+1. **老舊電腦救星**：無需安裝 Python、pip，無需處理環境變數衝突。系統已打包成免安裝綠色版執行檔。
+2. **純網頁刷卡介面**：打卡機只需外接 USB，操作人員只要打開瀏覽器 `http://localhost:8000/static/swipe.html`，即可進行無延遲的刷卡作業。
+3. **離線容錯機制**：就算補習班網路突然斷線，網頁端會自動將打卡紀錄暫存於瀏覽器 (LocalStorage) 中，待網路恢復後自動回傳補登，確保資料絕不遺失。
+4. **永久固定內網穿透 (Zrok)**：淘汰需時常換網址的 ngrok，改用資安大廠開源的 Zrok，提供免費、穩定且「永久固定」的 Webhook 網址。
 
 ---
 
-## 🚀 第一次建置：完整安裝與設定指南
+## 🚀 快速安裝與啟動教學 (給補習班管理者)
 
-為了確保系統能在櫃台電腦上穩定且長期運行，請負責建置的主管或 IT 人員嚴格依照以下步驟依序設定。
+### 第一步：準備系統與設定檔
 
-### 第一步：安裝 Python 語言環境
-本系統由 Python 驅動，因此必須安裝 Python 環境。
-1. 前往 [Python 官方網站](https://www.python.org/downloads/) 下載最新版 Python for Windows (建議 3.10 或以上)。
-2. 啟動安裝程式時，畫面最下方會有一個 **「Add python.exe to PATH」** 的選項，**⚠️ 請務必打勾（極度重要）**，然後再點擊「Install Now」。
-3. 安裝完成後，將本專案資料夾解壓縮並放置於櫃台電腦的 `C:` 或 `D:` 槽（路徑請盡量避免使用全中文名稱）。
+1. 下載本系統的壓縮包 (`dist/SmartSchoolBot.zip`，由開發者打包提供)，並解壓縮到電腦的任意位置（例如桌面）。
+2. 在 `SmartSchoolBot` 資料夾內，建立一個名為 `.env` 的文字檔，內容如下：
 
-### 第二步：申請與設定 LINE 商業官方帳號
-1. 進入 [LINE Developers Console](https://developers.line.biz/) 並登入您的 LINE 帳號。
-2. 點擊 `Create a new provider`，並在該 Provider 下創建一個 **Messaging API channel**（這將是您的補習班官方帳號）。
-3. 進入該 Channel 的設定頁面，完成以下金鑰擷取與設定：
-   - 到 **Basic settings** 分頁，往下滑找到 `Channel secret`，將其複製備用。
-   - 到 **Messaging API** 分頁：
-     - 找到 `Channel access token`，點擊 **Issue** 產生一組長代碼並複製備用。
-     - 在下方的 **LINE Official Account features** 中，將「Auto-reply messages（自動回覆訊息）」點擊 Edit 設為 **停用 (Disabled)**，並確保「Webhooks」設為 **啟用 (Enabled)**。
+```env
+# LINE 機器人金鑰
+LINE_CHANNEL_SECRET=你的_CHANNEL_SECRET
+LINE_CHANNEL_ACCESS_TOKEN=你的_ACCESS_TOKEN
 
-### 第三步：申請 Ngrok 固定網址 (突破內網防火牆)
-因為 LINE 的雲端伺服器必須要能連線到您補習班的櫃台電腦，我們必須使用 Ngrok 服務建立安全通道。為了避免每天網址一直變動，請務必領取免費的固定網址。
-1. 前往 [Ngrok 官網](https://ngrok.com/) 免費註冊帳號並登入。
-2. 進入儀表板後，點擊左側選單的 **Cloud Edge** -> **Domains**。
-3. 點擊 **Create Domain**，系統會免費配發一個專屬您的固定網址 (例如：`heroic-frog-upward.ngrok-free.app`)，請把這串網址複製記錄下來。
-4. 點擊左側選單的 **Getting Started** -> **Your Authtoken**，複製您的 Authtoken。
-5. 下載 Ngrok Windows 版本並解壓縮出 `ngrok.exe`。打開命令提示字元 (cmd)，輸入以下指令綁定您的帳號：
-   ```bash
-   ngrok config add-authtoken <您的Authtoken>
-   ```
+# 安全 Token (請自己亂打一長串英文數字，不要外洩)
+ADMIN_TOKEN=my_admin_super_secret_123
+CRON_TOKEN=my_cron_super_secret_456
+KIOSK_TOKEN=my_kiosk_super_secret_789
 
-### 第四步：專案機密金鑰配置 (.env)
-1. 在本專案的最外層目錄下，尋找或新增一個檔名為 `.env` 的文字檔。
-2. 將剛才收集到的 LINE 金鑰填入（請勿包含引號或多餘空格）：
-   ```env
-   LINE_CHANNEL_SECRET=您的_Channel_Secret
-   LINE_CHANNEL_ACCESS_TOKEN=您的_Access_Token
-   DATABASE_URL=sqlite:///./school.db
-   ```
-3. 找到專案內的 **`啟動智慧親師通.bat`** 檔案，按右鍵選「編輯」，將裡面 ngrok 指令的 `--domain=` 後面，換成您在第三步領取到的**固定網址**並存檔。
+# 允許跨網域請求的白名單 (包含您的 Zrok 網址)
+ALLOWED_ORIGINS=http://localhost:8000,http://127.0.0.1:8000,https://您的專屬Zrok網址.share.zrok.io
+```
 
-### 第五步：設定 LINE Webhook URL 並初始化系統
-1. 在專案資料夾內打開命令提示字元 (cmd)，執行以下指令建立環境與套件：
-   ```bash
-   python -m venv .venv
-   .venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
-2. 將補習班的學生名單存成 `學生資料.xlsx`，並放到專案的 `excels/` 資料夾內。
-   *(必須包含欄位：`學號`、`姓名`、`卡號`、`爸爸手機` / `媽媽手機` / `簡訊電話1`，手機號碼需為09開頭)*
-3. 點擊執行 **`啟動智慧親師通.bat`**，讓伺服器與 Ngrok 順利運行。
-4. 回到 [LINE Developers Console](https://developers.line.biz/) 的 Messaging API 分頁。找到 **Webhook settings**，在 Webhook URL 欄位填入：
-   `https://<您申請的Ngrok固定網址>/callback`
-   *(例如：https://heroic-frog-upward.ngrok-free.app/callback)*
-5. 點擊 **Verify** 按鈕測試連線，顯示 Success 即代表整套系統串接完美成功！
+### 第二步：申請固定穿透網址 (Zrok)
+
+因為 LINE 機器人必須把訊息傳給我們的電腦，我們需要一個穩定的隧道。我們使用免費強大的 [Zrok](https://zrok.io/)。
+
+1. **註冊 Zrok 帳號**：
+   前往 [zrok.io](https://zrok.io/) 註冊一個免費帳號。
+   
+2. **下載 Zrok 客戶端**：
+   前往 Zrok 的 GitHub Releases 頁面下載 Windows 版本的 `.zip`，解壓縮後會有一個 `zrok.exe`。建議把這個 `zrok.exe` 放到我們系統的資料夾裡。
+
+3. **登入 Zrok (只需做一次)**：
+   打開命令提示字元 (cmd)，輸入註冊後 Zrok 給你的 Enable 指令：
+   `zrok enable 你的專屬Token`
+
+4. **申請固定網址 (Reserved Share) (只需做一次)**：
+   在命令提示字元輸入：
+   `zrok reserve public localhost:8000 --backend-mode proxy`
+   *系統會回傳一組永久網址給您，例如：`https://xxyyzz.share.zrok.io`。請把這個網址填入上面的 `.env` 檔案的 `ALLOWED_ORIGINS` 之中。*
+
+5. **更新 LINE Developer Console**：
+   前往 LINE 開發者後台，把 Webhook URL 改為：
+   `https://您的專屬Zrok網址.share.zrok.io/webhook`
+
+### 第三步：日常啟動流程
+
+以後每天補習班開門，櫃台人員只需要做三件事：
+
+1. **啟動伺服器**：
+   雙擊資料夾內的 `SmartSchoolBot.exe`。看到一個黑色視窗寫著 `Application startup complete` 就代表啟動成功。請把它縮小放在背景，不要關閉。
+   
+2. **啟動 Zrok 隧道**：
+   雙擊我們為您準備的 `start_zrok.bat` (內容為 `zrok share reserved 你的Reserved_Token`)。同樣縮小放背景。
+   
+3. **開啟刷卡網頁**：
+   打開 Chrome 瀏覽器，進入 `http://localhost:8000/static/swipe.html`。
+   點擊「開始營業」，將游標點入輸入框，學生即可開始刷卡。
 
 ---
 
-## 🎯 櫃台每日操作 SOP
+## 🛠️ 開發者打包指南 (Build Instructions)
 
-這套系統建置完成後，日常的櫃台操作非常防呆且簡單，每天只需遵循以下三步：
+若您是開發者，修改了原始碼後需要重新打包，請遵循以下步驟：
 
-1. **啟動系統**
-   - 點擊桌面上的 **`啟動智慧親師通.bat`** 捷徑。
-   - 系統會自動彈出三個黑色視窗（伺服器、排程器與 Ngrok 連線），**請勿關閉這些黑視窗**，只要縮小即可。
-   - 瀏覽器會自動彈出打卡畫面。
+1. 確保已安裝 `pyinstaller` (`pip install pyinstaller`)。
+2. 確保虛擬環境 (`.venv`) 已經啟動。
+3. 執行根目錄的 `build.bat`。
+4. 打包完成後，所有檔案會集中在 `dist/SmartSchoolBot` 資料夾中。
+5. 發布時，只需將該資料夾打包成 `.zip` 傳給客戶即可。
 
-2. **開始營業 (解鎖)**
-   - 點選打卡網頁左上角的 **「▶️ 開始營業」**，此時打卡機輸入框才會發亮解鎖。
-   - 學生即可拿感應卡靠近讀卡機「嗶」一聲完成打卡。
+> 注意：`test.db` (資料庫) 與 `.env` 會在 `SmartSchoolBot.exe` 執行時，自動於「執行檔所在目錄」下尋找與生成。升級新版 `.exe` 時，切記保留舊的 `test.db` 與 `.env`！
 
-3. **結束營業 (結算)**
-   - 打烊時，點選左上角的 **「⏹️ 結束營業並結算」**。
-   - 系統會立刻鎖定打卡機（避免誤刷），並將今日所有打卡紀錄備份到專案的 `excels/Students/` 目錄下（檔名會自動標註日期）。
-   - 確認畫面上跳出「報表已儲存」後，即可安心關閉網頁與所有黑色視窗，完成一天的工作！
+---
+
+## 🛡️ 資安防護機制
+
+1. **全分離架構**：不再使用 LINE 官方帳號對話框直接綁定。全面升級為 LIFF 網頁結合「簡訊 OTP」綁定，杜絕任意冒名註冊。
+2. **零信任 API**：前端網頁每次呼叫後端皆需夾帶 Bearer Token，並且嚴格驗證來源網域 (CORS Allow Origins)。
+3. **防時序攻擊 (Timing Attack)**：密碼驗證全面採用 `secrets.compare_digest`。
+4. **離線打卡去重 (`client_swipe_id`)**：解決網路不穩導致的重複推播與重複寫入問題。

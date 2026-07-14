@@ -18,8 +18,15 @@ ENV/
 *.sqlite3
 
 # Logs and exported files
+*.log
 excels/Students/*
 !excels/Students/.gitkeep
+
+# PyInstaller Output
+dist/
+build/
+*.spec
+SmartSchoolBot.zip
 
 # OS generated files
 .DS_Store
