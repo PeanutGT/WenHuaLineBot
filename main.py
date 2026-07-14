@@ -627,20 +627,7 @@ def swipe_card(req: schemas.SwipeRequest, db: Session = Depends(get_db), token: 
     db.add(new_record)
     db.commit()
     
-    # Phase 3 & 5: Push immediate notification for Arrival (skip if offline historical retry)
-    if not is_offline_retry and new_status == "已進班" and student.parent and student.parent.is_bound and student.parent.line_user_id:
-        try:
-            tw_time = get_tw_now().strftime('%H:%M')
-            msg_text = f"【到班通知】\n✅ 您的孩子 {student.name} 已於 {tw_time} 抵達補習班。"
-            with ApiClient(configuration) as api_client:
-                line_bot_api = MessagingApi(api_client)
-                push_req = PushMessageRequest(
-                    to=student.parent.line_user_id,
-                    messages=[TextMessage(text=msg_text)]
-                )
-                line_bot_api.push_message(push_req)
-        except Exception as e:
-            logger.error(f"Error pushing arrival notification: {e}")
+    # 依使用者要求，移除打卡即時推播，轉為純查詢制 (家長透過 LINE 查詢)
     
     return {"status": "success", "student_name": student.name, "new_status": new_status}
 
