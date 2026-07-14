@@ -432,11 +432,41 @@ def handle_message(event):
             parts = text.split()
             db = SessionLocal()
             try:
-                reply_text = (
-                    "【智慧親師通 - 系統升級公告】\n"
-                    "🔒 為保障您的資料安全，我們已全面升級為「LIFF 網頁安全綁定」系統。\n\n"
-                    "請勿在此直接輸入綁定資訊。請點擊下方的「選單」，選擇「綁定身分」進行簡訊驗證綁定手續。"
-                )
+                if len(parts) != 3:
+                    reply_text = "格式錯誤。正確格式為：\n綁定 學生姓名 手機號碼"
+                else:
+                    student_name = parts[1]
+                    phone_number = parts[2]
+                    
+                    phone = clean_phone(phone_number)
+                    if not phone:
+                        reply_text = "無效的手機號碼格式。"
+                    else:
+                        parent = db.query(Parent).filter(Parent.phone_number == phone).first()
+                        if not parent:
+                            reply_text = "找不到該手機號碼對應的家長資料，請聯繫補習班確認。"
+                        else:
+                            student = db.query(Student).filter(Student.parent_id == parent.id, Student.name == student_name).first()
+                            if not student:
+                                reply_text = f"找不到名為「{student_name}」且關聯至該手機號碼的學生資料。"
+                            else:
+                                old_parent = db.query(Parent).filter(Parent.line_user_id == user_id).first()
+                                if old_parent and old_parent.id != parent.id:
+                                    old_parent.is_bound = False
+                                    old_parent.line_user_id = None
+                                    old_parent.bound_at = None
+                                    
+                                parent.line_user_id = user_id
+                                parent.is_bound = True
+                                parent.bound_at = datetime.datetime.utcnow()
+                                db.commit()
+                                
+                                reply_text = (
+                                    "【智慧親師通 - 綁定成功】\n"
+                                    f"✅ 已成功為您綁定學生「{student.name}」之親屬身分。\n\n"
+                                    "您現在可隨時點擊下方選單查詢出勤狀態，系統亦將於學生進退班時，自動發送推播通知給您。"
+                                )
+                
                 line_bot_api.reply_message(
                     ReplyMessageRequest(
                         reply_token=event.reply_token,
