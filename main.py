@@ -758,6 +758,77 @@ def get_recent_grades(db: Session = Depends(get_db), token: str = Depends(verify
         })
     return result
 
+@app.put("/api/grades/{score_id}")
+def update_grade(score_id: int, req: schemas.ExamScoreUpdate, db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
+    score_record = db.query(models.ExamScore).filter(models.ExamScore.id == score_id).first()
+    if not score_record:
+        raise HTTPException(status_code=404, detail="Score not found")
+        
+    if req.exam_name is not None:
+        score_record.exam_name = req.exam_name
+    if req.subject is not None:
+        score_record.subject = req.subject
+    if req.score is not None:
+        score_record.score = req.score
+        
+    db.commit()
+    db.refresh(score_record)
+    return {"status": "success", "id": score_record.id}
+
+@app.delete("/api/grades/{score_id}")
+def delete_grade(score_id: int, db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
+    score_record = db.query(models.ExamScore).filter(models.ExamScore.id == score_id).first()
+    if not score_record:
+        raise HTTPException(status_code=404, detail="Score not found")
+        
+    db.delete(score_record)
+    db.commit()
+    return {"status": "success"}
+
+@app.get("/api/grades/export")
+def export_grades(exam_name: Optional[str] = None, db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
+    query = db.query(models.ExamScore, Student.name, Student.student_number).join(Student, models.ExamScore.student_id == Student.id)
+    
+    if exam_name:
+        query = query.filter(models.ExamScore.exam_name == exam_name)
+        
+    records = query.order_by(models.ExamScore.date.asc()).all()
+    
+    data = []
+    for sc, s_name, s_num in records:
+        tw_time = (sc.date + datetime.timedelta(hours=8)).strftime('%Y-%m-%d %H:%M:%S')
+        data.append({
+            "學號": s_num,
+            "姓名": s_name,
+            "考試名稱": sc.exam_name,
+            "科目": sc.subject or "",
+            "成績": sc.score,
+            "登錄時間": tw_time
+        })
+        
+    df = pd.DataFrame(data)
+    date_str = get_tw_now().strftime('%Y-%m-%d')
+    file_name = f"{date_str}_成績紀錄.xlsx"
+    if exam_name:
+        file_name = f"{date_str}_{exam_name}_成績紀錄.xlsx"
+    
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='學生成績')
+        
+        # Adjust column widths
+        worksheet = writer.sheets['學生成績']
+        widths = {'A': 15, 'B': 15, 'C': 25, 'D': 15, 'E': 10, 'F': 25}
+        for col, width in widths.items():
+            worksheet.column_dimensions[col].width = width
+    
+    output.seek(0)
+    encoded_file_name = quote(file_name)
+    headers = {
+        'Content-Disposition': f"attachment; filename*=utf-8''{encoded_file_name}"
+    }
+    return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
 @app.post("/api/timetable/import")
 async def import_timetable(file: UploadFile = File(...), db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
     content = await file.read()

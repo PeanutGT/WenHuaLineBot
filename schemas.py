@@ -43,6 +43,11 @@ class ExamScoreCreate(BaseModel):
     subject: Optional[str] = None
     score: str
 
+class ExamScoreUpdate(BaseModel):
+    exam_name: Optional[str] = None
+    subject: Optional[str] = None
+    score: Optional[str] = None
+
 class ExamScoreResponse(BaseModel):
     id: int
     student_id: int

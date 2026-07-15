@@ -179,6 +179,26 @@
             border-color: var(--success);
             box-shadow: 0 10px 20px -10px var(--success);
         }
+        
+        button.btn-danger {
+            background-color: rgba(248, 113, 113, 0.15);
+            color: var(--error);
+            border-color: rgba(248, 113, 113, 0.4);
+        }
+        
+        button.btn-danger:hover:not(:disabled) {
+            background-color: rgba(248, 113, 113, 0.25);
+            border-color: var(--error);
+            box-shadow: 0 10px 20px -10px var(--error);
+        }
+        
+        button.btn-small {
+            width: auto;
+            padding: 6px 12px;
+            font-size: 13px;
+            border-radius: 6px;
+            margin-right: 4px;
+        }
 
         .status-message {
             margin-top: 16px;
@@ -295,10 +315,22 @@
             <div id="submitStatus" class="status-message"></div>
         </div>
 
-        <!-- History Section -->
+        <!-- History & Export Section -->
         <div class="card">
-            <h1>📋 最近登錄紀錄</h1>
-            <p class="subtitle">顯示最新 50 筆已登錄的成績</p>
+            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px;">
+                <div>
+                    <h1 style="text-align: left; margin-bottom: 4px;">📋 歷史紀錄與成績匯出</h1>
+                    <p class="subtitle" style="text-align: left; margin-bottom: 0;">顯示最新 50 筆紀錄，可直接點擊編輯或刪除</p>
+                </div>
+                
+                <!-- Export Controls -->
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <select id="exportExamName" style="padding: 10px; border-radius: 8px; width: 200px;">
+                        <option value="">-- 全部考試成績 --</option>
+                    </select>
+                    <button id="exportBtn" class="btn-success" style="width: auto; padding: 10px 20px; border-radius: 8px;">📥 下載 Excel</button>
+                </div>
+            </div>
             <div style="overflow-x: auto;">
                 <table id="historyTable">
                     <thead>
@@ -306,7 +338,9 @@
                             <th>登錄時間</th>
                             <th>學生姓名</th>
                             <th>考試名稱</th>
+                            <th>科目</th>
                             <th>成績</th>
+                            <th>操作</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -483,6 +517,9 @@
         }
     });
 
+    const exportExamName = document.getElementById('exportExamName');
+    const exportBtn = document.getElementById('exportBtn');
+
     async function loadHistory() {
         try {
             const res = await fetch('/api/grades/recent', {
@@ -491,13 +528,34 @@
             if (res.ok) {
                 const records = await res.json();
                 historyTableBody.innerHTML = '';
+                
+                // Populate export dropdown with unique exam names
+                const examNames = new Set();
+                records.forEach(r => {
+                    if(r.exam_name) examNames.add(r.exam_name);
+                });
+                const currentExportSel = exportExamName.value;
+                exportExamName.innerHTML = '<option value="">-- 全部考試成績 --</option>';
+                examNames.forEach(ename => {
+                    const opt = document.createElement('option');
+                    opt.value = ename; opt.textContent = ename;
+                    exportExamName.appendChild(opt);
+                });
+                exportExamName.value = currentExportSel;
+
                 records.forEach(r => {
                     const tr = document.createElement('tr');
+                    tr.id = `row-${r.id}`;
                     tr.innerHTML = `
                         <td style="color:var(--text-muted)">${r.date}</td>
                         <td style="font-weight:600">${r.student_name}</td>
-                        <td>${r.exam_name}</td>
-                        <td style="color:var(--primary); font-weight:600">${r.score}</td>
+                        <td class="col-exam">${r.exam_name}</td>
+                        <td class="col-subject">${r.subject || ''}</td>
+                        <td class="col-score" style="color:var(--primary); font-weight:600">${r.score}</td>
+                        <td>
+                            <button class="btn-small" onclick="editRow(${r.id}, '${r.exam_name}', '${r.subject || ''}', '${r.score}')">✏️ 編輯</button>
+                            <button class="btn-small btn-danger" onclick="deleteRow(${r.id})">🗑️ 刪除</button>
+                        </td>
                     `;
                     historyTableBody.appendChild(tr);
                 });
@@ -506,6 +564,72 @@
             console.error("Failed to load history", e);
         }
     }
+
+    function editRow(id, oldExam, oldSubj, oldScore) {
+        const tr = document.getElementById(`row-${id}`);
+        tr.querySelector('.col-exam').innerHTML = `<input type="text" id="edit-exam-${id}" value="${oldExam}" style="padding:6px; font-size:13px; width:100px;">`;
+        tr.querySelector('.col-subject').innerHTML = `<input type="text" id="edit-subj-${id}" value="${oldSubj}" style="padding:6px; font-size:13px; width:80px;">`;
+        tr.querySelector('.col-score').innerHTML = `<input type="text" id="edit-score-${id}" value="${oldScore}" style="padding:6px; font-size:13px; width:60px;">`;
+        tr.querySelector('td:last-child').innerHTML = `
+            <button class="btn-small btn-success" onclick="saveRow(${id})">💾 儲存</button>
+            <button class="btn-small btn-danger" onclick="loadHistory()">❌ 取消</button>
+        `;
+    }
+
+    async function saveRow(id) {
+        const exam = document.getElementById(`edit-exam-${id}`).value.trim();
+        const subj = document.getElementById(`edit-subj-${id}`).value.trim();
+        const score = document.getElementById(`edit-score-${id}`).value.trim();
+        
+        try {
+            const res = await fetch(`/api/grades/${id}`, {
+                method: 'PUT',
+                headers: { 
+                    'Authorization': `Bearer ${currentToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    exam_name: exam,
+                    subject: subj || null,
+                    score: score
+                })
+            });
+            if (res.ok) {
+                loadHistory(); // Reload table
+            } else {
+                alert("儲存失敗");
+            }
+        } catch (e) {
+            alert("系統錯誤");
+        }
+    }
+
+    async function deleteRow(id) {
+        if (!confirm("確定要刪除這筆成績紀錄嗎？")) return;
+        
+        try {
+            const res = await fetch(`/api/grades/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${currentToken}` }
+            });
+            if (res.ok) {
+                loadHistory();
+            } else {
+                alert("刪除失敗");
+            }
+        } catch (e) {
+            alert("系統錯誤");
+        }
+    }
+
+    exportBtn.addEventListener('click', () => {
+        const ename = exportExamName.value;
+        let url = `/api/grades/export?token=${encodeURIComponent(currentToken)}`;
+        if (ename) {
+            url += `&exam_name=${encodeURIComponent(ename)}`;
+        }
+        window.location.href = url;
+    });
 </script>
 </body>
 </html>
