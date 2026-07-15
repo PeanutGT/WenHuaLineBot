@@ -50,21 +50,31 @@ def generate_split_menu_image():
     bbox1 = d.textbbox((0, 0), text1, font=font)
     text_w1 = bbox1[2] - bbox1[0]
     text_h1 = bbox1[3] - bbox1[1]
-    x1 = (width / 2 - text_w1) / 2
+    x1 = (833 - text_w1) / 2
     y1 = (height - text_h1) / 2
     d.text((x1, y1), text1, font=font, fill=text_color)
     
-    # Right Side: Query Info
+    # Middle Side: Query Attendance
     text2 = "2. 查詢出勤"
     bbox2 = d.textbbox((0, 0), text2, font=font)
     text_w2 = bbox2[2] - bbox2[0]
     text_h2 = bbox2[3] - bbox2[1]
-    x2 = width / 2 + (width / 2 - text_w2) / 2
+    x2 = 833 + (833 - text_w2) / 2
     y2 = (height - text_h2) / 2
     d.text((x2, y2), text2, font=font, fill=text_color)
     
-    # Center Divider
-    d.line([(width/2, 100), (width/2, height-100)], fill=text_color, width=10)
+    # Right Side: Query Grades
+    text3 = "3. 查詢成績"
+    bbox3 = d.textbbox((0, 0), text3, font=font)
+    text_w3 = bbox3[2] - bbox3[0]
+    text_h3 = bbox3[3] - bbox3[1]
+    x3 = 1666 + (834 - text_w3) / 2
+    y3 = (height - text_h3) / 2
+    d.text((x3, y3), text3, font=font, fill=text_color)
+    
+    # Dividers
+    d.line([(833, 100), (833, height-100)], fill=text_color, width=10)
+    d.line([(1666, 100), (1666, height-100)], fill=text_color, width=10)
     
     # Outer Border
     d.rectangle([(80, 80), (width-80, height-80)], outline=text_color, width=15)
@@ -87,12 +97,16 @@ def create_and_set_rich_menu():
             chat_bar_text="智慧親師通",
             areas=[
                 RichMenuArea(
-                    bounds=RichMenuBounds(x=0, y=0, width=1250, height=1686),
+                    bounds=RichMenuBounds(x=0, y=0, width=833, height=1686),
                     action=URIAction(type="uri", uri=liff_url)
                 ),
                 RichMenuArea(
-                    bounds=RichMenuBounds(x=1250, y=0, width=1250, height=1686),
+                    bounds=RichMenuBounds(x=833, y=0, width=833, height=1686),
                     action=MessageAction(type="message", text="查詢孩子資料")
+                ),
+                RichMenuArea(
+                    bounds=RichMenuBounds(x=1666, y=0, width=834, height=1686),
+                    action=MessageAction(type="message", text="查詢成績")
                 )
             ]
         )

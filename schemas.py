@@ -4,6 +4,7 @@ from typing import List, Optional
 class BindRequest(BaseModel):
     phone_number: str
     line_user_id: str
+    student_name: str
 
 class PushMessageReq(BaseModel):
     line_user_id: str

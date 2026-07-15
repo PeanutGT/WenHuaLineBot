@@ -36,11 +36,14 @@
 
         <div id="bind-form" class="hidden">
             <div class="input-group">
+                <label for="studentName">學生姓名</label>
+                <input type="text" id="studentName" placeholder="例如: 王小明">
+            </div>
+            
+            <div class="input-group">
                 <label for="phone">註冊手機號碼 (測試用: 0912345678)</label>
                 <input type="tel" id="phone" placeholder="例如: 0912345678" maxlength="10">
             </div>
-            
-            <!-- OTP Input Removed -->
 
             <button id="btn-bind" class="btn-primary">確認綁定</button>
             <p id="message-area" class="message"></p>

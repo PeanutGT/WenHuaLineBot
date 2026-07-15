@@ -40,8 +40,13 @@ async function initializeLiff() {
 
 
 document.getElementById('btn-bind').addEventListener('click', async () => {
-    const phone = document.getElementById('phone').value;
+    const studentName = document.getElementById('studentName').value.trim();
+    const phone = document.getElementById('phone').value.trim();
     
+    if (!studentName) {
+        showMessage('請輸入學生姓名', 'error');
+        return;
+    }
     if (!phone || phone.length < 10) {
         showMessage('請填寫完整手機號碼', 'error');
         return;
@@ -51,7 +56,11 @@ document.getElementById('btn-bind').addEventListener('click', async () => {
         const res = await fetch('/api/bind', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone_number: phone, line_user_id: userLineId })
+            body: JSON.stringify({ 
+                phone_number: phone, 
+                line_user_id: userLineId,
+                student_name: studentName
+            })
         });
         
         if (res.ok) {

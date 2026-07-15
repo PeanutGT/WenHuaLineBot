@@ -31,3 +31,9 @@ SmartSchoolBot.zip
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# Test Data
+test.db
+linebot.db
+schedule.json
+*.xlsx

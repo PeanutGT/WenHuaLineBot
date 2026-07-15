@@ -297,14 +297,15 @@
     </div>
 </div>
 
+<script src="/static/auth.js"></script>
 <script>
-    let currentToken = sessionStorage.getItem('ADMIN_TOKEN') || '';
+    const authManager = new AuthManager('/api/students', () => {
+        fetchStudents();
+    });
 
-    const loginSection = document.getElementById('loginSection');
-    const dashboardSection = document.getElementById('dashboardSection');
-    const adminTokenInput = document.getElementById('adminToken');
-    const loginBtn = document.getElementById('loginBtn');
-    const loginStatus = document.getElementById('loginStatus');
+    Object.defineProperty(window, 'currentToken', {
+        get: () => authManager.currentToken
+    });
 
     const uploadBtn = document.getElementById('uploadBtn');
     const excelFile = document.getElementById('excelFile');
@@ -318,39 +319,6 @@
     function showStatus(element, message, isError = false) {
         element.textContent = message;
         element.className = 'status-message ' + (isError ? 'error' : 'success');
-    }
-
-    if (currentToken) {
-        adminTokenInput.value = currentToken;
-        attemptLogin(currentToken);
-    }
-
-    loginBtn.addEventListener('click', () => {
-        const token = adminTokenInput.value.trim();
-        if (!token) {
-            showStatus(loginStatus, '請輸入密碼！', true);
-            return;
-        }
-        attemptLogin(token);
-    });
-
-    async function attemptLogin(token) {
-        try {
-            const res = await fetch('/api/students', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (!res.ok) throw new Error("密碼錯誤");
-            
-            currentToken = token;
-            sessionStorage.setItem('ADMIN_TOKEN', token);
-            
-            loginSection.classList.add('hidden');
-            dashboardSection.classList.remove('hidden');
-            
-            fetchStudents();
-        } catch (e) {
-            showStatus(loginStatus, '❌ 驗證失敗：' + e.message, true);
-        }
     }
 
     uploadBtn.addEventListener('click', async () => {
@@ -444,11 +412,14 @@
                     return;
                 }
                 
-                let html = '<table class="st-table"><thead><tr><th>學號</th><th>姓名</th><th>班級</th><th>上課科目</th></tr></thead><tbody>';
+                let html = '<table class="st-table"><thead><tr><th>學號</th><th>姓名</th><th>家長姓名</th><th>Line ID</th><th>班級</th><th>上課科目</th></tr></thead><tbody>';
                 students.forEach(s => {
+                    const lineIdStatus = s.line_user_id ? '<span style="color:var(--success);">已綁定</span>' : '<span style="color:#94a3b8;">未綁定</span>';
                     html += `<tr>
                         <td style="font-family: monospace; color: #94a3b8;">${s.student_number}</td>
                         <td style="font-weight: 600;">${s.name}</td>
+                        <td style="color: #cbd5e1;">${s.parent_name || '無資料'}</td>
+                        <td style="font-family: monospace; font-size: 0.85em;">${s.line_user_id ? s.line_user_id.substring(0, 8) + '...' : lineIdStatus}</td>
                         <td style="color: #94a3b8;">${s.class_name || ''}</td>
                         <td style="color: #94a3b8;">${s.enrolled_subjects || ''}</td>
                     </tr>`;

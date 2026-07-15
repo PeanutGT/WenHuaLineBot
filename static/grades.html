@@ -319,14 +319,20 @@
     </div>
 </div>
 
+<script src="/static/auth.js"></script>
 <script>
-    let currentToken = sessionStorage.getItem('ADMIN_TOKEN') || '';
+    let allStudents = [];
 
-    const loginSection = document.getElementById('loginSection');
-    const dashboardSection = document.getElementById('dashboardSection');
-    const adminTokenInput = document.getElementById('adminToken');
-    const loginBtn = document.getElementById('loginBtn');
-    const loginStatus = document.getElementById('loginStatus');
+    const authManager = new AuthManager('/api/students', (students, token) => {
+        allStudents = students;
+        populateFilters();
+        filterAndRenderStudents();
+        loadHistory();
+    });
+
+    Object.defineProperty(window, 'currentToken', {
+        get: () => authManager.currentToken
+    });
 
     const examName = document.getElementById('examName');
     const classFilter = document.getElementById('classFilter');
@@ -335,50 +341,10 @@
     const submitBtn = document.getElementById('submitBtn');
     const submitStatus = document.getElementById('submitStatus');
     const historyTableBody = document.querySelector('#historyTable tbody');
-    
-    let allStudents = [];
 
     function showStatus(element, message, isError = false) {
         element.textContent = message;
         element.className = 'status-message ' + (isError ? 'error' : 'success');
-    }
-
-    if (currentToken) {
-        adminTokenInput.value = currentToken;
-        attemptLogin(currentToken);
-    }
-
-    loginBtn.addEventListener('click', () => {
-        const token = adminTokenInput.value.trim();
-        if (!token) {
-            showStatus(loginStatus, '請輸入密碼！', true);
-            return;
-        }
-        attemptLogin(token);
-    });
-
-    async function attemptLogin(token) {
-        try {
-            // Test token by fetching students
-            const res = await fetch('/api/students', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (!res.ok) throw new Error("密碼錯誤");
-            
-            const students = await res.json();
-            currentToken = token;
-            sessionStorage.setItem('ADMIN_TOKEN', token);
-            allStudents = students;
-            
-            loginSection.classList.add('hidden');
-            dashboardSection.classList.remove('hidden');
-            
-            populateFilters();
-            filterAndRenderStudents();
-            loadHistory();
-        } catch (e) {
-            showStatus(loginStatus, '❌ 驗證失敗：' + e.message, true);
-        }
     }
 
     function populateFilters() {

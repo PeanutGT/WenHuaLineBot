@@ -296,15 +296,22 @@
     </div>
 </div>
 
+<script src="/static/auth.js"></script>
 <script>
-    let currentToken = '';
+    const authManager = new AuthManager('/api/groups', (data, token) => {
+        // No extra fetching needed on admin load
+    });
+
+    // We can expose currentToken helper
+    Object.defineProperty(window, 'currentToken', {
+        get: () => authManager.currentToken
+    });
 
     const loginSection = document.getElementById('loginSection');
     const dashboardSection = document.getElementById('dashboardSection');
     const adminTokenInput = document.getElementById('adminToken');
     const loginBtn = document.getElementById('loginBtn');
     const loginStatus = document.getElementById('loginStatus');
-
 
     const exportBtn = document.getElementById('exportBtn');
     const exportStatus = document.getElementById('exportStatus');
@@ -313,18 +320,6 @@
         element.textContent = message;
         element.className = 'status-message ' + (isError ? 'error' : 'success');
     }
-
-    loginBtn.addEventListener('click', () => {
-        const token = adminTokenInput.value.trim();
-        if (!token) {
-            showStatus(loginStatus, '請輸入密碼！', true);
-            return;
-        }
-        currentToken = token;
-        
-        loginSection.classList.add('hidden');
-        dashboardSection.classList.remove('hidden');
-    });
 
     adminTokenInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') loginBtn.click();

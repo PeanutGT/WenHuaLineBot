@@ -313,14 +313,15 @@
     </div>
 </div>
 
+<script src="/static/auth.js"></script>
 <script>
-    let currentToken = sessionStorage.getItem('ADMIN_TOKEN') || '';
+    const authManager = new AuthManager('/api/students', () => {
+        fetchTimetable();
+    });
 
-    const loginSection = document.getElementById('loginSection');
-    const dashboardSection = document.getElementById('dashboardSection');
-    const adminTokenInput = document.getElementById('adminToken');
-    const loginBtn = document.getElementById('loginBtn');
-    const loginStatus = document.getElementById('loginStatus');
+    Object.defineProperty(window, 'currentToken', {
+        get: () => authManager.currentToken
+    });
 
     const uploadBtn = document.getElementById('uploadBtn');
     const excelFile = document.getElementById('excelFile');
@@ -331,41 +332,6 @@
     function showStatus(element, message, isError = false) {
         element.textContent = message;
         element.className = 'status-message ' + (isError ? 'error' : 'success');
-    }
-
-    if (currentToken) {
-        adminTokenInput.value = currentToken;
-        attemptLogin(currentToken);
-    }
-
-    loginBtn.addEventListener('click', () => {
-        const token = adminTokenInput.value.trim();
-        if (!token) {
-            showStatus(loginStatus, '請輸入密碼！', true);
-            return;
-        }
-        attemptLogin(token);
-    });
-
-    async function attemptLogin(token) {
-        try {
-            // Test token by trying to hit an endpoint (we can reuse /api/students just for validation)
-            const res = await fetch('/api/students', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (!res.ok) throw new Error("密碼錯誤");
-            
-            currentToken = token;
-            sessionStorage.setItem('ADMIN_TOKEN', token);
-            
-            loginSection.classList.add('hidden');
-            dashboardSection.classList.remove('hidden');
-            
-            // Load preview
-            fetchTimetable();
-        } catch (e) {
-            showStatus(loginStatus, '❌ 驗證失敗：' + e.message, true);
-        }
     }
 
     uploadBtn.addEventListener('click', async () => {
