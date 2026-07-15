@@ -93,14 +93,20 @@ def handle_message(event):
                     else:
                         reply_messages = []
                         for s in parent.students:
-                            last_attendance = db.query(Attendance)\
+                            recent_attendances = db.query(Attendance)\
                                 .filter(Attendance.student_id == s.id)\
-                                .order_by(Attendance.timestamp.desc()).first()
+                                .order_by(Attendance.timestamp.desc())\
+                                .limit(6).all()
                             
-                            status = last_attendance.status if last_attendance else "尚無出勤紀錄"
-                            time_str = (last_attendance.timestamp + datetime.timedelta(hours=8)).strftime('%Y-%m-%d %H:%M:%S') if last_attendance else ""
-                            
-                            reply_messages.append(f"👨‍🎓 學生：{s.name}\n🕒 狀態：{status} {time_str}")
+                            if not recent_attendances:
+                                reply_messages.append(f"👨‍🎓 學生：{s.name}\n🕒 尚無出勤紀錄")
+                            else:
+                                record_strs = []
+                                for att in recent_attendances:
+                                    time_str = (att.timestamp + datetime.timedelta(hours=8)).strftime('%Y-%m-%d %H:%M')
+                                    record_strs.append(f" - {time_str} ({att.status})")
+                                records_text = "\n".join(record_strs)
+                                reply_messages.append(f"👨‍🎓 學生：{s.name}\n📍 最近出勤紀錄：\n{records_text}")
                         
                         reply_text = "\n\n".join(reply_messages)
                 
