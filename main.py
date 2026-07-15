@@ -678,6 +678,15 @@ def api_export_students(db: Session = Depends(get_db), token: str = Depends(veri
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='學生名單')
+        worksheet = writer.sheets['學生名單']
+        worksheet.column_dimensions['A'].width = 15 # 學號
+        worksheet.column_dimensions['B'].width = 12 # 姓名
+        worksheet.column_dimensions['C'].width = 15 # 卡號
+        worksheet.column_dimensions['D'].width = 15 # 家長姓名
+        worksheet.column_dimensions['E'].width = 15 # 聯絡電話
+        worksheet.column_dimensions['F'].width = 35 # Line ID
+        worksheet.column_dimensions['G'].width = 15 # 班級
+        worksheet.column_dimensions['H'].width = 30 # 科目
     
     output.seek(0)
     encoded_file_name = quote(file_name)
