@@ -801,11 +801,11 @@ def export_timetable(db: Session = Depends(get_db), token: str = Depends(verify_
                 
                 # Merge and sort
                 time_slots = sorted(list(set(fixed_time_slots + db_time_slots)))
-                days = ["日", "一", "二", "三", "四", "五", "六"]
+                days = ["一", "二", "三", "四", "五", "六", "日"]
                 
                 rows = []
                 for ts in time_slots:
-                    row = {gname: ts}
+                    row = {"時間": ts}
                     for d in days:
                         # Find subject
                         subj = next((x.subject for x in gitems if x.time_slot == ts and x.day_of_week == d), "")
@@ -813,7 +813,9 @@ def export_timetable(db: Session = Depends(get_db), token: str = Depends(verify_
                     rows.append(row)
                     
                 df = pd.DataFrame(rows)
-                df.to_excel(writer, index=False, sheet_name=gname)
+                # Ensure sheet_name is valid (max 31 chars, avoid invalid chars if possible)
+                safe_gname = str(gname).replace('/', '-').replace('\\', '-')[:31]
+                df.to_excel(writer, index=False, sheet_name=safe_gname)
                 
     output.seek(0)
     encoded_file_name = quote("課表.xlsx")
