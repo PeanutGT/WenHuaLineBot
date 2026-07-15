@@ -283,26 +283,16 @@
     <!-- Dashboard Section (Hidden by default) -->
     <div id="dashboardSection" class="hidden">
         
-        <div style="margin-bottom: 24px; display: flex; gap: 12px;">
+        <div style="margin-bottom: 24px; display: flex; gap: 12px; flex-wrap: wrap;">
+            <button onclick="window.open('students.html', '_blank')" style="background-color: rgba(56, 189, 248, 0.15); color: #7dd3fc; border-color: rgba(56, 189, 248, 0.4);">
+                👥 前往名單管理系統
+            </button>
             <button onclick="window.open('grades.html', '_blank')" style="background-color: rgba(139, 92, 246, 0.15); color: #c4b5fd; border-color: rgba(139, 92, 246, 0.4);">
                 📊 前往成績登錄系統
             </button>
             <button onclick="window.open('timetable.html', '_blank')" style="background-color: rgba(236, 72, 153, 0.15); color: #f9a8d4; border-color: rgba(236, 72, 153, 0.4);">
                 📅 前往課表管理系統
             </button>
-        </div>
-        <!-- Upload Section -->
-        <div class="card">
-            <h1>📥 匯入學生名單</h1>
-            <p class="subtitle">請上傳包含「學號、姓名、卡號、簡訊電話1/媽媽手機/爸爸手機」的 Excel 檔案</p>
-            
-            <div class="form-group">
-                <input type="file" id="excelFile" accept=".xlsx, .xls">
-            </div>
-            <button id="uploadBtn">
-                <span class="loader" id="uploadLoader"></span> 上傳並同步資料庫
-            </button>
-            <div id="uploadStatus" class="status-message"></div>
         </div>
 
         <!-- Export Section -->
@@ -350,10 +340,6 @@
     const loginBtn = document.getElementById('loginBtn');
     const loginStatus = document.getElementById('loginStatus');
 
-    const excelFile = document.getElementById('excelFile');
-    const uploadBtn = document.getElementById('uploadBtn');
-    const uploadLoader = document.getElementById('uploadLoader');
-    const uploadStatus = document.getElementById('uploadStatus');
 
     const exportBtn = document.getElementById('exportBtn');
     const exportStatus = document.getElementById('exportStatus');
@@ -380,44 +366,6 @@
         if (e.key === 'Enter') loginBtn.click();
     });
 
-    uploadBtn.addEventListener('click', async () => {
-        const file = excelFile.files[0];
-        if (!file) {
-            showStatus(uploadStatus, '請先選擇一個 Excel 檔案！', true);
-            return;
-        }
-
-        const formData = new FormData();
-        formData.append('file', file);
-
-        uploadBtn.disabled = true;
-        uploadLoader.style.display = 'inline-block';
-        uploadStatus.className = 'status-message'; // hide previous
-
-        try {
-            const response = await fetch('/api/sync-excel', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${currentToken}`
-                },
-                body: formData
-            });
-
-            if (!response.ok) {
-                const errData = await response.json();
-                throw new Error(errData.detail || '上傳失敗或密碼錯誤');
-            }
-
-            const result = await response.json();
-            showStatus(uploadStatus, `✅ 同步成功！新增/更新家長 ${result.parents_updated} 筆，學生 ${result.students_updated} 筆。`, false);
-            excelFile.value = ''; // clear input
-        } catch (error) {
-            showStatus(uploadStatus, '❌ ' + error.message, true);
-        } finally {
-            uploadBtn.disabled = false;
-            uploadLoader.style.display = 'none';
-        }
-    });
 
     exportBtn.addEventListener('click', async () => {
         exportBtn.disabled = true;

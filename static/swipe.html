@@ -242,8 +242,9 @@
         .timetable-drawer {
             position: fixed;
             top: 0;
-            right: -400px;
-            width: 350px;
+            right: -100vw;
+            width: 90vw;
+            max-width: 1000px;
             height: 100vh;
             background: rgba(15, 23, 42, 0.95);
             backdrop-filter: blur(20px);
@@ -282,32 +283,43 @@
         }
         .close-drawer:hover { color: #f8fafc; }
         
-        .timetable-group {
-            margin-bottom: 20px;
-            background: rgba(255,255,255,0.05);
-            border-radius: 12px;
-            padding: 15px;
+        .tt-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            table-layout: fixed;
         }
-        .timetable-group h3 {
-            margin: 0 0 10px 0;
-            color: #f472b6;
-            font-size: 1.1rem;
-        }
-        .timetable-item {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 8px;
+        .tt-table th, .tt-table td {
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 12px 8px;
+            text-align: center;
             font-size: 0.95rem;
-            border-bottom: 1px dashed rgba(255,255,255,0.1);
-            padding-bottom: 4px;
+            vertical-align: middle;
+            word-wrap: break-word;
         }
-        .timetable-item:last-child {
-            border-bottom: none;
-            margin-bottom: 0;
-            padding-bottom: 0;
+        .tt-table th {
+            background: rgba(0, 0, 0, 0.3);
+            color: #f472b6;
+            font-weight: 600;
         }
-        .tt-time { color: #94a3b8; width: 60px;}
-        .tt-subj { color: #e2e8f0; font-weight: 600; flex: 1; text-align: right;}
+        .tt-table .time-col {
+            width: 80px;
+            color: #94a3b8;
+            background: rgba(0,0,0,0.2);
+        }
+        .tt-table .today-col {
+            background: rgba(196, 181, 253, 0.15);
+            border-left: 2px solid #c4b5fd;
+            border-right: 2px solid #c4b5fd;
+        }
+        .tt-table tbody tr:last-child .today-col {
+            border-bottom: 2px solid #c4b5fd;
+        }
+        .tt-table th.today-col {
+            background: rgba(196, 181, 253, 0.3);
+            color: #c4b5fd;
+            border-top: 2px solid #c4b5fd;
+        }
 
         /* Floating Button */
         .fab-timetable {
@@ -369,8 +381,13 @@
     <!-- Timetable Drawer -->
     <div class="timetable-drawer" id="timetableDrawer">
         <div class="timetable-header">
-            <h2>📚 今日課表</h2>
+            <h2>📚 全週課表</h2>
             <button class="close-drawer" onclick="toggleTimetable()">✕</button>
+        </div>
+        <div style="margin-bottom: 15px;">
+            <select id="ttGroupSelect" style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; font-size: 1rem; outline: none;" onchange="renderTimetable()">
+                <option value="">載入中...</option>
+            </select>
         </div>
         <div id="timetableContent">
             <p style="color:#94a3b8; text-align:center;">載入中...</p>
@@ -711,6 +728,31 @@
             const res = await fetch('/api/timetable');
             if (res.ok) {
                 cachedTimetable = await res.json();
+                
+                // Populate selectbox
+                const groupSelect = document.getElementById('ttGroupSelect');
+                const groups = Object.keys(cachedTimetable);
+                
+                if (groups.length === 0) {
+                    groupSelect.innerHTML = '<option value="">無課表資料</option>';
+                } else {
+                    const currentVal = groupSelect.value;
+                    groupSelect.innerHTML = '';
+                    groups.forEach(g => {
+                        const opt = document.createElement('option');
+                        opt.value = g;
+                        opt.textContent = g;
+                        opt.style.background = '#0f172a';
+                        groupSelect.appendChild(opt);
+                    });
+                    if (groups.includes(currentVal)) {
+                        groupSelect.value = currentVal;
+                    }
+                }
+                
+                if (timetableDrawer.classList.contains('open')) {
+                    renderTimetable();
+                }
             }
         } catch (e) {
             console.error('Failed to fetch timetable:', e);
@@ -723,34 +765,46 @@
             return;
         }
 
-        const days = ["日", "一", "二", "三", "四", "五", "六"];
-        const todayStr = days[new Date().getDay()];
+        const groupSelect = document.getElementById('ttGroupSelect');
+        const selectedGroup = groupSelect.value;
         
-        let html = '';
-        for (const [groupName, items] of Object.entries(cachedTimetable)) {
-            const todaysItems = items.filter(i => i.day_of_week === todayStr);
-            if (todaysItems.length > 0) {
-                // sort by time
-                todaysItems.sort((a,b) => a.time_slot.localeCompare(b.time_slot));
-                
-                html += `<div class="timetable-group">
-                    <h3>${groupName}</h3>`;
-                
-                for (const item of todaysItems) {
-                    html += `<div class="timetable-item">
-                        <span class="tt-time">${item.time_slot}</span>
-                        <span class="tt-subj">${item.subject}</span>
-                    </div>`;
-                }
-                html += `</div>`;
-            }
+        if (!selectedGroup || !cachedTimetable[selectedGroup]) {
+            timetableContent.innerHTML = '<p style="color:#94a3b8; text-align:center; margin-top:40px;">請選擇上方年級</p>';
+            return;
         }
 
-        if (html === '') {
-            timetableContent.innerHTML = `<p style="color:#94a3b8; text-align:center; margin-top:40px;">今日 (${todayStr}) 尚無排定課程</p>`;
-        } else {
-            timetableContent.innerHTML = `<p style="color:#94a3b8; font-size:0.9rem; margin-bottom:15px; text-align:center;">今日星期${todayStr}</p>` + html;
+        const items = cachedTimetable[selectedGroup];
+        if (items.length === 0) {
+            timetableContent.innerHTML = '<p style="color:#94a3b8; text-align:center; margin-top:40px;">本週無排定課程</p>';
+            return;
         }
+
+        // Get unique time slots
+        const timeSlots = [...new Set(items.map(i => i.time_slot))].sort();
+        const days = ["日", "一", "二", "三", "四", "五", "六"];
+        const todayIdx = new Date().getDay(); // 0 for Sunday, 6 for Saturday
+
+        let html = '<table class="tt-table"><thead><tr><th class="time-col">時間</th>';
+        
+        days.forEach((day, idx) => {
+            const isToday = (idx === todayIdx);
+            html += `<th class="${isToday ? 'today-col' : ''}">${day}${isToday ? '<br><span style="font-size:0.8rem">(今天)</span>' : ''}</th>`;
+        });
+        html += '</tr></thead><tbody>';
+
+        timeSlots.forEach(ts => {
+            html += `<tr><td class="time-col">${ts}</td>`;
+            days.forEach((day, idx) => {
+                const isToday = (idx === todayIdx);
+                const subjItem = items.find(i => i.time_slot === ts && i.day_of_week === day);
+                const subj = subjItem ? subjItem.subject : '';
+                html += `<td class="${isToday ? 'today-col' : ''}">${subj}</td>`;
+            });
+            html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        timetableContent.innerHTML = html;
     }
 
     // Initialize timetable fetch
