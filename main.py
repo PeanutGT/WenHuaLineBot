@@ -16,6 +16,7 @@ from linebot.v3 import WebhookHandler
 
 from database import engine, Base, get_db, SessionLocal
 import models
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from models import Parent, Student, Attendance
 from linebot.v3.messaging import Configuration, ApiClient, MessagingApi, ReplyMessageRequest
@@ -39,6 +40,14 @@ else:
     # Normal Python script
     app_dir = os.path.dirname(os.path.abspath(__file__))
     static_dir = app_dir
+
+# Auto-migrate groups table to add is_active column if missing
+try:
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE groups ADD COLUMN is_active BOOLEAN DEFAULT TRUE"))
+        conn.commit()
+except Exception as e:
+    pass # Column might already exist
 
 # Phase 1: Create database tables if they don't exist
 Base.metadata.create_all(bind=engine)
