@@ -584,6 +584,16 @@ def get_today_attendance(db: Session = Depends(get_db), token: str = Depends(ver
     result.reverse()
     return result
 
+@app.get("/api/setup-menu")
+def api_setup_menu():
+    try:
+        from scripts.setup_rich_menus import create_and_set_rich_menu
+        create_and_set_rich_menu()
+        return {"status": "Rich Menu successfully updated on LINE server!"}
+    except Exception as e:
+        logger.error(f"Error setting up rich menu: {e}", exc_info=True)
+        return {"status": "error", "detail": str(e)}
+
 @app.post("/api/sync-excel")
 async def api_sync_excel(file: UploadFile = File(...), token: str = Depends(verify_admin_token)):
     content = await file.read()
