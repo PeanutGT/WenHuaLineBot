@@ -189,7 +189,9 @@ def sync_excel_to_db_from_file(file_content: bytes):
             student_name = str(row.get('姓名')).strip() if row.get('姓名') else None
             card_number = clean_card_number(row.get('卡號'))
             
-            phone = clean_phone(row.get('簡訊電話1'))
+            phone = clean_phone(row.get('聯絡電話'))
+            if not phone:
+                phone = clean_phone(row.get('簡訊電話1'))
             if not phone:
                 phone = clean_phone(row.get('媽媽手機'))
             if not phone:
