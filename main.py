@@ -12,12 +12,13 @@ from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
+from linebot.v3 import WebhookHandler
 
 from database import engine, Base, get_db, SessionLocal
 import models
 from sqlalchemy.orm import Session
 from models import Parent, Student, Attendance
-from linebot.v3.messaging import ReplyMessageRequest
+from linebot.v3.messaging import Configuration, ApiClient, MessagingApi, ReplyMessageRequest
 import schemas
 from fastapi.staticfiles import StaticFiles
 import datetime
