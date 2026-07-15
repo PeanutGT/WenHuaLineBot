@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智慧親師通 - 成績登錄系統</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #c4b5fd;
+            --primary-hover: #a78bfa;
+            --bg-dark: #0f172a;
+            --card-bg: rgba(255, 255, 255, 0.05);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-color: rgba(255, 255, 255, 0.1);
+            --success: #4ade80;
+            --error: #f87171;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            background-attachment: fixed;
+            color: var(--text-main);
+            margin: 0;
+            padding: 40px 0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            position: relative;
+            overflow-y: auto;
+            overflow-x: hidden;
+            box-sizing: border-box;
+        }
+
+        .blob {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.3;
+            z-index: 0;
+            animation: float 10s infinite alternate ease-in-out;
+        }
+        .blob-1 {
+            top: -10%; left: -10%;
+            width: 400px; height: 400px;
+            background: #8b5cf6;
+        }
+        .blob-2 {
+            bottom: -10%; right: -10%;
+            width: 500px; height: 500px;
+            background: #ec4899;
+            animation-delay: -5s;
+        }
+        @keyframes float {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(50px, 50px) scale(1.1); }
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            padding: 20px;
+            box-sizing: border-box;
+            z-index: 1;
+            position: relative;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            padding: 32px;
+            margin-bottom: 24px;
+            animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        
+        @keyframes slideUp {
+            0% { opacity: 0; transform: translateY(40px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 24px;
+            font-weight: 800;
+            margin-top: 0;
+            margin-bottom: 8px;
+            color: var(--primary);
+            text-shadow: 0 0 20px rgba(196, 181, 253, 0.4);
+        }
+
+        p.subtitle {
+            text-align: center;
+            color: var(--text-muted);
+            margin-bottom: 32px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        input[type="text"], input[type="password"], select {
+            width: 100%;
+            padding: 14px 16px;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            color: white;
+            font-size: 16px;
+            outline: none;
+            transition: all 0.3s ease;
+            box-sizing: border-box;
+        }
+        
+        select option {
+            background: var(--bg-dark);
+            color: white;
+        }
+
+        input:focus, select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(196, 181, 253, 0.2);
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background-color: rgba(196, 181, 253, 0.15);
+            color: var(--primary);
+            border: 1px solid rgba(196, 181, 253, 0.4);
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        button:hover:not(:disabled) {
+            background-color: rgba(196, 181, 253, 0.25);
+            border-color: var(--primary);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px -10px var(--primary);
+        }
+
+        button:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            filter: grayscale(100%);
+        }
+
+        .status-message {
+            margin-top: 16px;
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 14px;
+            display: none;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .status-message.success {
+            display: block;
+            background-color: rgba(74, 222, 128, 0.1);
+            color: var(--success);
+            border: 1px solid rgba(74, 222, 128, 0.2);
+        }
+
+        .status-message.error {
+            display: block;
+            background-color: rgba(248, 113, 113, 0.1);
+            color: var(--error);
+            border: 1px solid rgba(248, 113, 113, 0.2);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Table Styles */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        th {
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+        tr:hover {
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+
+<div class="container">
+    
+    <!-- Login Section -->
+    <div class="card" id="loginSection">
+        <h1>成績系統權限驗證</h1>
+        <p class="subtitle">系統自動讀取 ADMIN_TOKEN，或請手動輸入</p>
+        
+        <div class="form-group">
+            <input type="password" id="adminToken" placeholder="輸入密碼..." autocomplete="current-password">
+        </div>
+        <button id="loginBtn">登入</button>
+        <div id="loginStatus" class="status-message"></div>
+    </div>
+
+    <!-- Dashboard Section -->
+    <div id="dashboardSection" class="hidden">
+        
+        <!-- Input Section -->
+        <div class="card">
+            <h1>📝 登錄學生成績</h1>
+            <p class="subtitle">輸入成績或狀態（如：缺考），家長即可在 LINE 即時查詢</p>
+            
+            <div class="form-group">
+                <label>選擇學生：</label>
+                <select id="studentSelect">
+                    <option value="">載入中...</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>考試名稱 (如：國一上第一次段考 數學)：</label>
+                <input type="text" id="examName" placeholder="請輸入考試名稱">
+            </div>
+            <div class="form-group">
+                <label>成績 / 狀態 (如：95 或 缺考)：</label>
+                <input type="text" id="score" placeholder="請輸入分數">
+            </div>
+            <button id="submitBtn">儲存成績</button>
+            <div id="submitStatus" class="status-message"></div>
+        </div>
+
+        <!-- History Section -->
+        <div class="card">
+            <h1>📋 最近登錄紀錄</h1>
+            <p class="subtitle">顯示最新 50 筆已登錄的成績</p>
+            <div style="overflow-x: auto;">
+                <table id="historyTable">
+                    <thead>
+                        <tr>
+                            <th>登錄時間</th>
+                            <th>學生姓名</th>
+                            <th>考試名稱</th>
+                            <th>成績</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    let currentToken = sessionStorage.getItem('ADMIN_TOKEN') || '';
+
+    const loginSection = document.getElementById('loginSection');
+    const dashboardSection = document.getElementById('dashboardSection');
+    const adminTokenInput = document.getElementById('adminToken');
+    const loginBtn = document.getElementById('loginBtn');
+    const loginStatus = document.getElementById('loginStatus');
+
+    const studentSelect = document.getElementById('studentSelect');
+    const examName = document.getElementById('examName');
+    const score = document.getElementById('score');
+    const submitBtn = document.getElementById('submitBtn');
+    const submitStatus = document.getElementById('submitStatus');
+    const historyTableBody = document.querySelector('#historyTable tbody');
+
+    function showStatus(element, message, isError = false) {
+        element.textContent = message;
+        element.className = 'status-message ' + (isError ? 'error' : 'success');
+    }
+
+    if (currentToken) {
+        adminTokenInput.value = currentToken;
+        attemptLogin(currentToken);
+    }
+
+    loginBtn.addEventListener('click', () => {
+        const token = adminTokenInput.value.trim();
+        if (!token) {
+            showStatus(loginStatus, '請輸入密碼！', true);
+            return;
+        }
+        attemptLogin(token);
+    });
+
+    async function attemptLogin(token) {
+        try {
+            // Test token by fetching students
+            const res = await fetch('/api/students', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!res.ok) throw new Error("密碼錯誤");
+            
+            const students = await res.json();
+            currentToken = token;
+            sessionStorage.setItem('ADMIN_TOKEN', token);
+            
+            loginSection.classList.add('hidden');
+            dashboardSection.classList.remove('hidden');
+            
+            populateStudents(students);
+            loadHistory();
+        } catch (e) {
+            showStatus(loginStatus, '❌ 驗證失敗：' + e.message, true);
+        }
+    }
+
+    function populateStudents(students) {
+        studentSelect.innerHTML = '<option value="">-- 請選擇學生 --</option>';
+        students.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.id;
+            opt.textContent = `${s.student_number} - ${s.name}`;
+            studentSelect.appendChild(opt);
+        });
+    }
+
+    submitBtn.addEventListener('click', async () => {
+        const studentId = studentSelect.value;
+        const eName = examName.value.trim();
+        const eScore = score.value.trim();
+
+        if (!studentId || !eName || !eScore) {
+            showStatus(submitStatus, '請完整填寫所有欄位！', true);
+            return;
+        }
+
+        submitBtn.disabled = true;
+        try {
+            const res = await fetch('/api/grades', {
+                method: 'POST',
+                headers: { 
+                    'Authorization': `Bearer ${currentToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    student_id: parseInt(studentId),
+                    exam_name: eName,
+                    score: eScore
+                })
+            });
+
+            if (!res.ok) throw new Error("儲存失敗");
+            
+            showStatus(submitStatus, '✅ 成績登錄成功！', false);
+            score.value = ''; // Clear score, keep exam name for rapid entry
+            examName.focus();
+            loadHistory();
+        } catch (e) {
+            showStatus(submitStatus, '❌ ' + e.message, true);
+        } finally {
+            submitBtn.disabled = false;
+        }
+    });
+
+    async function loadHistory() {
+        try {
+            const res = await fetch('/api/grades/recent', {
+                headers: { 'Authorization': `Bearer ${currentToken}` }
+            });
+            if (res.ok) {
+                const records = await res.json();
+                historyTableBody.innerHTML = '';
+                records.forEach(r => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td style="color:var(--text-muted)">${r.date}</td>
+                        <td style="font-weight:600">${r.student_name}</td>
+                        <td>${r.exam_name}</td>
+                        <td style="color:var(--primary); font-weight:600">${r.score}</td>
+                    `;
+                    historyTableBody.appendChild(tr);
+                });
+            }
+        } catch (e) {
+            console.error("Failed to load history", e);
+        }
+    }
+</script>
+</body>
+</html>

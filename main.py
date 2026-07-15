@@ -137,6 +137,10 @@ def clean_phone(val):
 def get_config():
     return {"liffId": os.getenv("LIFF_ID", "")}
 
+@app.get("/api/ping")
+def ping():
+    return {"status": "ok", "message": "Pong! Server is awake."}
+
 # Use UploadFile in the API endpoint instead of reading from disk
 def sync_excel_to_db_from_file(file_content: bytes):
     logger.info("Starting stateless Excel sync...")
@@ -433,27 +437,78 @@ def handle_message(event):
                 logger.error(f"Error querying data: {e}", exc_info=True)
             finally:
                 db.close()
+        elif text == "查詢成績":
+            db = SessionLocal()
+            try:
+                parent = db.query(Parent).filter(Parent.line_user_id == user_id).first()
+                if not parent:
+                    reply_text = "您目前尚未綁定家長身分，請先進行綁定。"
+                else:
+                    if not parent.students:
+                        reply_text = "您目前名下沒有綁定的學生資料。"
+                    else:
+                        reply_messages = []
+                        for s in parent.students:
+                            recent_scores = db.query(models.ExamScore)\
+                                .filter(models.ExamScore.student_id == s.id)\
+                                .order_by(models.ExamScore.date.desc())\
+                                .limit(5).all()
+                            
+                            if not recent_scores:
+                                reply_messages.append(f"👨‍🎓 學生：{s.name}\n尚無成績紀錄")
+                            else:
+                                score_lines = [f"👨‍🎓 學生：{s.name}"]
+                                for sc in recent_scores:
+                                    score_lines.append(f"• {sc.exam_name}：{sc.score}")
+                                reply_messages.append("\n".join(score_lines))
+                        
+                        reply_text = "【近期成績紀錄】\n\n" + "\n\n".join(reply_messages)
+                
+                line_bot_api.reply_message(
+                    ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[TextMessage(text=reply_text)]
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Error querying grades: {e}", exc_info=True)
+            finally:
+                db.close()
         elif text.startswith("綁定 "):
             parts = text.split()
             db = SessionLocal()
             try:
                 if len(parts) != 3:
-                    reply_text = "格式錯誤。正確格式為：\n綁定 學生姓名 手機號碼"
+                    reply_text = "⚠️ 格式錯誤。\n正確格式為（中間請加一個半形空白）：\n綁定 學生姓名 手機號碼\n\n範例：綁定 王小明 0912345678"
                 else:
                     student_name = parts[1]
                     phone_number = parts[2]
                     
                     phone = clean_phone(phone_number)
                     if not phone:
-                        reply_text = "無效的手機號碼格式。"
+                        reply_text = "⚠️ 無效的手機號碼格式。\n請確認您輸入的手機號碼是否正確，並重新輸入。"
                     else:
                         parent = db.query(Parent).filter(Parent.phone_number == phone).first()
                         if not parent:
-                            reply_text = "找不到該手機號碼對應的家長資料，請聯繫補習班確認。"
+                            reply_text = (
+                                "❌ 綁定失敗\n\n"
+                                "找不到該手機號碼對應的家長資料。\n"
+                                "可能原因：\n"
+                                "1. 您輸入的手機號碼有誤，請重新檢查。\n"
+                                "2. 補習班尚未將您的資料建檔，或登錄的號碼與您輸入的不同。\n\n"
+                                "👉 請來電或前往補習班櫃檯，與行政老師確認您的聯絡電話資料是否正確。"
+                            )
                         else:
                             student = db.query(Student).filter(Student.parent_id == parent.id, Student.name == student_name).first()
                             if not student:
-                                reply_text = f"找不到名為「{student_name}」且關聯至該手機號碼的學生資料。"
+                                reply_text = (
+                                    "❌ 綁定失敗\n\n"
+                                    f"找不到名為「{student_name}」且關聯至該手機號碼的學生資料。\n"
+                                    "可能原因：\n"
+                                    "1. 學生姓名打錯字（請確認有無錯別字）。\n"
+                                    "2. 補習班建檔時的學生姓名與您輸入的不同。\n\n"
+                                    "👉 請重新輸入，或向補習班老師確認建檔的學生姓名。"
+                                )
                             else:
                                 old_parent = db.query(Parent).filter(Parent.line_user_id == user_id).first()
                                 if old_parent and old_parent.id != parent.id:
@@ -704,3 +759,43 @@ def api_export_attendance(db: Session = Depends(get_db), token: str = Depends(ve
         'Content-Disposition': f"attachment; filename*=utf-8''{encoded_file_name}"
     }
     return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+@app.get("/api/students")
+def get_students(db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
+    students = db.query(Student).order_by(Student.student_number).all()
+    return [{"id": s.id, "name": s.name, "student_number": s.student_number} for s in students]
+
+@app.post("/api/grades")
+def create_grade(req: schemas.ExamScoreCreate, db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
+    student = db.query(Student).filter(Student.id == req.student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+        
+    new_score = models.ExamScore(
+        student_id=req.student_id,
+        exam_name=req.exam_name,
+        score=req.score
+    )
+    db.add(new_score)
+    db.commit()
+    return {"status": "success"}
+
+@app.get("/api/grades/recent", response_model=List[schemas.ExamScoreResponse])
+def get_recent_grades(db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
+    records = db.query(models.ExamScore, Student.name)\
+        .join(Student, models.ExamScore.student_id == Student.id)\
+        .order_by(models.ExamScore.date.desc())\
+        .limit(50).all()
+        
+    result = []
+    for sc, s_name in records:
+        tw_time = (sc.date + datetime.timedelta(hours=8)).strftime('%Y-%m-%d %H:%M')
+        result.append({
+            "id": sc.id,
+            "student_id": sc.student_id,
+            "student_name": s_name,
+            "exam_name": sc.exam_name,
+            "score": sc.score,
+            "date": tw_time
+        })
+    return result

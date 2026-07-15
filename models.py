@@ -80,3 +80,14 @@ class OtpRecord(Base):
     expires_at = Column(DateTime, nullable=False)
     attempts = Column(Integer, default=0)
 
+class ExamScore(Base):
+    __tablename__ = "exam_scores"
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("students.id"))
+    exam_name = Column(String, nullable=False)
+    score = Column(String, nullable=False)
+    date = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    student = relationship("Student")
+
+

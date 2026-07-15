@@ -35,3 +35,19 @@ class GroupResponse(BaseModel):
     schedules: List[ClassScheduleResponse]
     class Config:
         orm_mode = True
+
+class ExamScoreCreate(BaseModel):
+    student_id: int
+    exam_name: str
+    score: str
+
+class ExamScoreResponse(BaseModel):
+    id: int
+    student_id: int
+    student_name: str
+    exam_name: str
+    score: str
+    date: str
+    
+    class Config:
+        orm_mode = True

@@ -332,6 +332,16 @@
             const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
             dateEl.textContent = now.toLocaleDateString('zh-TW', options);
         }
+        // Keep-alive ping to prevent Render from sleeping
+        setInterval(async () => {
+            try {
+                await fetch('/api/ping');
+                console.log('Keep-alive ping sent.');
+            } catch (e) {
+                console.log('Keep-alive ping failed.');
+            }
+        }, 10 * 60 * 1000); // 10 minutes
+
         setInterval(updateClock, 1000);
         updateClock();
 
