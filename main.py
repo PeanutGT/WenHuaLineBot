@@ -23,6 +23,7 @@ import schemas
 from fastapi.staticfiles import StaticFiles
 import datetime
 from linebot.v3.messaging import PushMessageRequest, TextMessage
+from routers.line_webhook import router as webhook_router
 import pandas as pd
 
 # Configure logging
