@@ -98,15 +98,22 @@ def handle_message(event):
                                 .order_by(Attendance.timestamp.desc())\
                                 .limit(6).all()
                             
+                            info_lines = [f"👨‍🎓 學生：{s.name}"]
+                            if s.class_name:
+                                info_lines.append(f"🏫 班級：{s.class_name}")
+                            if s.enrolled_subjects:
+                                info_lines.append(f"📚 科目：{s.enrolled_subjects}")
+                                
+                            info_lines.append("\n📍 最近出勤：")
+                            
                             if not recent_attendances:
-                                reply_messages.append(f"👨‍🎓 學生：{s.name}\n🕒 尚無出勤紀錄")
+                                info_lines.append(" - 尚無出勤紀錄")
                             else:
-                                record_strs = []
                                 for att in recent_attendances:
-                                    time_str = (att.timestamp + datetime.timedelta(hours=8)).strftime('%Y-%m-%d %H:%M')
-                                    record_strs.append(f" - {time_str} ({att.status})")
-                                records_text = "\n".join(record_strs)
-                                reply_messages.append(f"👨‍🎓 學生：{s.name}\n📍 最近出勤紀錄：\n{records_text}")
+                                    time_str = (att.timestamp + datetime.timedelta(hours=8)).strftime('%m/%d %H:%M')
+                                    info_lines.append(f" - {time_str} ({att.status})")
+                                    
+                            reply_messages.append("\n".join(info_lines))
                         
                         reply_text = "\n\n".join(reply_messages)
                 
