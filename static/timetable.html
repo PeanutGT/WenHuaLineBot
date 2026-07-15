@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智慧親師通 - 課表管理系統</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #f472b6;
+            --primary-hover: #db2777;
+            --bg-dark: #0f172a;
+            --card-bg: rgba(255, 255, 255, 0.05);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-color: rgba(255, 255, 255, 0.1);
+            --success: #4ade80;
+            --error: #f87171;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #31102e 100%);
+            background-attachment: fixed;
+            color: var(--text-main);
+            margin: 0;
+            padding: 40px 0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            position: relative;
+            overflow-y: auto;
+            overflow-x: hidden;
+            box-sizing: border-box;
+        }
+
+        .blob {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.3;
+            z-index: 0;
+            animation: float 10s infinite alternate ease-in-out;
+        }
+        .blob-1 {
+            top: -10%; left: -10%;
+            width: 400px; height: 400px;
+            background: #ec4899;
+        }
+        .blob-2 {
+            bottom: -10%; right: -10%;
+            width: 500px; height: 500px;
+            background: #8b5cf6;
+            animation-delay: -5s;
+        }
+        @keyframes float {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(50px, 50px) scale(1.1); }
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            padding: 20px;
+            box-sizing: border-box;
+            z-index: 1;
+            position: relative;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            padding: 32px;
+            margin-bottom: 24px;
+            animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        
+        @keyframes slideUp {
+            0% { opacity: 0; transform: translateY(40px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 24px;
+            font-weight: 800;
+            margin-top: 0;
+            margin-bottom: 8px;
+            color: var(--primary);
+            text-shadow: 0 0 20px rgba(244, 114, 182, 0.4);
+        }
+
+        p.subtitle {
+            text-align: center;
+            color: var(--text-muted);
+            margin-bottom: 32px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        input[type="password"], input[type="file"] {
+            width: 100%;
+            padding: 14px 16px;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            color: white;
+            font-size: 16px;
+            outline: none;
+            transition: all 0.3s ease;
+            box-sizing: border-box;
+        }
+
+        input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(244, 114, 182, 0.2);
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background-color: rgba(244, 114, 182, 0.15);
+            color: var(--primary);
+            border: 1px solid rgba(244, 114, 182, 0.4);
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        button:hover:not(:disabled) {
+            background-color: rgba(244, 114, 182, 0.25);
+            border-color: var(--primary);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px -10px var(--primary);
+        }
+
+        button:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            filter: grayscale(100%);
+        }
+
+        .btn-secondary {
+            background-color: rgba(148, 163, 184, 0.15);
+            color: #cbd5e1;
+            border-color: rgba(148, 163, 184, 0.4);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background-color: rgba(148, 163, 184, 0.25);
+            border-color: #cbd5e1;
+            box-shadow: 0 10px 20px -10px #cbd5e1;
+        }
+
+        .status-message {
+            margin-top: 16px;
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 14px;
+            display: none;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .status-message.success {
+            display: block;
+            background-color: rgba(74, 222, 128, 0.1);
+            color: var(--success);
+            border: 1px solid rgba(74, 222, 128, 0.2);
+        }
+
+        .status-message.error {
+            display: block;
+            background-color: rgba(248, 113, 113, 0.1);
+            color: var(--error);
+            border: 1px solid rgba(248, 113, 113, 0.2);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Loader */
+        .loader {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid transparent;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+            display: none;
+        }
+
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        button.loading .loader { display: inline-block; }
+    </style>
+</head>
+<body>
+
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+
+<div class="container">
+    
+    <!-- Login Section -->
+    <div class="card" id="loginSection">
+        <h1>課表系統權限驗證</h1>
+        <p class="subtitle">系統自動讀取 ADMIN_TOKEN，或請手動輸入</p>
+        
+        <div class="form-group">
+            <input type="password" id="adminToken" placeholder="輸入密碼..." autocomplete="current-password">
+        </div>
+        <button id="loginBtn">登入</button>
+        <div id="loginStatus" class="status-message"></div>
+    </div>
+
+    <!-- Dashboard Section -->
+    <div id="dashboardSection" class="hidden">
+        
+        <!-- Upload Section -->
+        <div class="card">
+            <h1>📥 匯入班級課表</h1>
+            <p class="subtitle">請上傳「課表.xlsx」，不同年級請放在不同工作表(Sheet)</p>
+            
+            <div class="form-group">
+                <input type="file" id="excelFile" accept=".xlsx, .xls">
+            </div>
+            <button id="uploadBtn">
+                <span class="loader" id="uploadLoader"></span> 覆蓋並上傳最新課表
+            </button>
+            <div id="uploadStatus" class="status-message"></div>
+        </div>
+
+        <!-- Export Section -->
+        <div class="card">
+            <h1>📤 匯出目前課表</h1>
+            <p class="subtitle">將雲端資料庫中目前的課表下載回 Excel 檔案</p>
+            
+            <button id="exportBtn" class="btn-secondary">下載課表 Excel</button>
+            <div id="exportStatus" class="status-message"></div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    let currentToken = sessionStorage.getItem('ADMIN_TOKEN') || '';
+
+    const loginSection = document.getElementById('loginSection');
+    const dashboardSection = document.getElementById('dashboardSection');
+    const adminTokenInput = document.getElementById('adminToken');
+    const loginBtn = document.getElementById('loginBtn');
+    const loginStatus = document.getElementById('loginStatus');
+
+    const uploadBtn = document.getElementById('uploadBtn');
+    const excelFile = document.getElementById('excelFile');
+    const uploadStatus = document.getElementById('uploadStatus');
+    const exportBtn = document.getElementById('exportBtn');
+    const exportStatus = document.getElementById('exportStatus');
+
+    function showStatus(element, message, isError = false) {
+        element.textContent = message;
+        element.className = 'status-message ' + (isError ? 'error' : 'success');
+    }
+
+    if (currentToken) {
+        adminTokenInput.value = currentToken;
+        attemptLogin(currentToken);
+    }
+
+    loginBtn.addEventListener('click', () => {
+        const token = adminTokenInput.value.trim();
+        if (!token) {
+            showStatus(loginStatus, '請輸入密碼！', true);
+            return;
+        }
+        attemptLogin(token);
+    });
+
+    async function attemptLogin(token) {
+        try {
+            // Test token by trying to hit an endpoint (we can reuse /api/students just for validation)
+            const res = await fetch('/api/students', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!res.ok) throw new Error("密碼錯誤");
+            
+            currentToken = token;
+            sessionStorage.setItem('ADMIN_TOKEN', token);
+            
+            loginSection.classList.add('hidden');
+            dashboardSection.classList.remove('hidden');
+        } catch (e) {
+            showStatus(loginStatus, '❌ 驗證失敗：' + e.message, true);
+        }
+    }
+
+    uploadBtn.addEventListener('click', async () => {
+        const file = excelFile.files[0];
+        if (!file) {
+            showStatus(uploadStatus, '請先選擇檔案', true);
+            return;
+        }
+
+        uploadBtn.disabled = true;
+        uploadBtn.classList.add('loading');
+        
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const response = await fetch('/api/timetable/import', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${currentToken}` },
+                body: formData
+            });
+            
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.detail || "上傳失敗");
+            }
+            
+            showStatus(uploadStatus, '✅ 課表更新成功！', false);
+            excelFile.value = '';
+        } catch (e) {
+            showStatus(uploadStatus, '❌ 錯誤：' + e.message, true);
+        } finally {
+            uploadBtn.disabled = false;
+            uploadBtn.classList.remove('loading');
+        }
+    });
+
+    exportBtn.addEventListener('click', async () => {
+        exportBtn.disabled = true;
+        showStatus(exportStatus, '正在產生檔案，請稍候...', false);
+        try {
+            const response = await fetch('/api/timetable/export', {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${currentToken}` }
+            });
+            
+            if (!response.ok) throw new Error("匯出失敗");
+            
+            // Trigger download
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let filename = "課表.xlsx";
+            if (contentDisposition) {
+                const filenameMatch = contentDisposition.match(/filename\*=utf-8''(.+)/);
+                if (filenameMatch && filenameMatch.length === 2) {
+                    filename = decodeURIComponent(filenameMatch[1]);
+                }
+            }
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+            
+            showStatus(exportStatus, '✅ 匯出成功！', false);
+        } catch (e) {
+            showStatus(exportStatus, '❌ 匯出失敗：' + e.message, true);
+        } finally {
+            exportBtn.disabled = false;
+        }
+    });
+
+</script>
+</body>
+</html>

@@ -235,6 +235,102 @@
             }
             .clock-time { font-size: 3.5rem; }
             h1 { font-size: 2rem; }
+            h1 { font-size: 2rem; }
+        }
+
+        /* Timetable Drawer */
+        .timetable-drawer {
+            position: fixed;
+            top: 0;
+            right: -400px;
+            width: 350px;
+            height: 100vh;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(20px);
+            border-left: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: -10px 0 30px rgba(0,0,0,0.5);
+            transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            z-index: 1000;
+            padding: 30px 20px;
+            box-sizing: border-box;
+            overflow-y: auto;
+            color: #f8fafc;
+        }
+        .timetable-drawer.open {
+            right: 0;
+        }
+        .timetable-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 10px;
+        }
+        .timetable-header h2 {
+            margin: 0;
+            color: #c4b5fd;
+            font-size: 1.5rem;
+        }
+        .close-drawer {
+            background: none;
+            border: none;
+            color: #94a3b8;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0;
+        }
+        .close-drawer:hover { color: #f8fafc; }
+        
+        .timetable-group {
+            margin-bottom: 20px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 15px;
+        }
+        .timetable-group h3 {
+            margin: 0 0 10px 0;
+            color: #f472b6;
+            font-size: 1.1rem;
+        }
+        .timetable-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+            border-bottom: 1px dashed rgba(255,255,255,0.1);
+            padding-bottom: 4px;
+        }
+        .timetable-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        .tt-time { color: #94a3b8; width: 60px;}
+        .tt-subj { color: #e2e8f0; font-weight: 600; flex: 1; text-align: right;}
+
+        /* Floating Button */
+        .fab-timetable {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: linear-gradient(135deg, #c4b5fd, #f472b6);
+            color: #1e1b4b;
+            border: none;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            font-size: 1.5rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            cursor: pointer;
+            z-index: 999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .fab-timetable:hover {
+            transform: scale(1.1) rotate(5deg);
         }
     </style>
 </head>
@@ -264,6 +360,20 @@
         <div class="right-header">今日刷卡紀錄即時看板</div>
         <div class="history-list" id="history-list">
             <!-- Items injected by JS -->
+        </div>
+    </div>
+    
+    <!-- Timetable Floating Button -->
+    <button class="fab-timetable" id="fabTimetable" onclick="toggleTimetable()">📅</button>
+
+    <!-- Timetable Drawer -->
+    <div class="timetable-drawer" id="timetableDrawer">
+        <div class="timetable-header">
+            <h2>📚 今日課表</h2>
+            <button class="close-drawer" onclick="toggleTimetable()">✕</button>
+        </div>
+        <div id="timetableContent">
+            <p style="color:#94a3b8; text-align:center;">載入中...</p>
         </div>
     </div>
 
@@ -584,6 +694,70 @@
             // Add to top of the list
             historyList.prepend(el);
         }
-    </script>
+        const fabTimetable = document.getElementById('fabTimetable');
+    const timetableDrawer = document.getElementById('timetableDrawer');
+    const timetableContent = document.getElementById('timetableContent');
+    let cachedTimetable = null;
+
+    function toggleTimetable() {
+        timetableDrawer.classList.toggle('open');
+        if (timetableDrawer.classList.contains('open')) {
+            renderTimetable();
+        }
+    }
+
+    async function fetchTimetable() {
+        try {
+            const res = await fetch('/api/timetable');
+            if (res.ok) {
+                cachedTimetable = await res.json();
+            }
+        } catch (e) {
+            console.error('Failed to fetch timetable:', e);
+        }
+    }
+
+    function renderTimetable() {
+        if (!cachedTimetable) {
+            timetableContent.innerHTML = '<p style="color:#f87171; text-align:center;">無法取得課表資料</p>';
+            return;
+        }
+
+        const days = ["日", "一", "二", "三", "四", "五", "六"];
+        const todayStr = days[new Date().getDay()];
+        
+        let html = '';
+        for (const [groupName, items] of Object.entries(cachedTimetable)) {
+            const todaysItems = items.filter(i => i.day_of_week === todayStr);
+            if (todaysItems.length > 0) {
+                // sort by time
+                todaysItems.sort((a,b) => a.time_slot.localeCompare(b.time_slot));
+                
+                html += `<div class="timetable-group">
+                    <h3>${groupName}</h3>`;
+                
+                for (const item of todaysItems) {
+                    html += `<div class="timetable-item">
+                        <span class="tt-time">${item.time_slot}</span>
+                        <span class="tt-subj">${item.subject}</span>
+                    </div>`;
+                }
+                html += `</div>`;
+            }
+        }
+
+        if (html === '') {
+            timetableContent.innerHTML = `<p style="color:#94a3b8; text-align:center; margin-top:40px;">今日 (${todayStr}) 尚無排定課程</p>`;
+        } else {
+            timetableContent.innerHTML = `<p style="color:#94a3b8; font-size:0.9rem; margin-bottom:15px; text-align:center;">今日星期${todayStr}</p>` + html;
+        }
+    }
+
+    // Initialize timetable fetch
+    fetchTimetable();
+    // Refresh timetable every 30 mins
+    setInterval(fetchTimetable, 30 * 60 * 1000);
+
+</script>
 </body>
 </html>

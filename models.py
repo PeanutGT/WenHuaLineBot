@@ -90,4 +90,12 @@ class ExamScore(Base):
     
     student = relationship("Student")
 
+class TimetableItem(Base):
+    __tablename__ = "timetable_items"
+    id = Column(Integer, primary_key=True, index=True)
+    group_name = Column(String, index=True, nullable=False)
+    time_slot = Column(String, nullable=False) # e.g. "14:00:00"
+    day_of_week = Column(String, nullable=False) # "一", "二", "三"
+    subject = Column(String, nullable=False) # "數學小考"
+
 

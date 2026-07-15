@@ -133,6 +133,20 @@ def clean_phone(val):
     except Exception:
         return None
 
+def clean_card_number(val):
+    if pd.isna(val) or not val:
+        return None
+    try:
+        s = str(val).strip()
+        if s.endswith('.0'):
+            s = s[:-2]
+        # 如果整串都是數字，自動補齊到 10 碼
+        if s.isdigit():
+            return s.zfill(10)
+        return s
+    except:
+        return None
+
 @app.get("/api/config")
 def get_config():
     return {"liffId": os.getenv("LIFF_ID", "")}
@@ -160,7 +174,7 @@ def sync_excel_to_db_from_file(file_content: bytes):
             
             student_number = str(row.get('學號')).strip() if row.get('學號') else None
             student_name = str(row.get('姓名')).strip() if row.get('姓名') else None
-            card_number = str(row.get('卡號')).strip() if row.get('卡號') else None
+            card_number = clean_card_number(row.get('卡號'))
             
             phone = clean_phone(row.get('簡訊電話1'))
             if not phone:
@@ -780,6 +794,20 @@ def create_grade(req: schemas.ExamScoreCreate, db: Session = Depends(get_db), to
     db.commit()
     return {"status": "success"}
 
+@app.post("/api/grades/bulk")
+def create_grades_bulk(req: schemas.ExamScoreBulkCreate, db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
+    for item in req.scores:
+        if not item.score or str(item.score).strip() == "":
+            continue
+        new_score = models.ExamScore(
+            student_id=item.student_id,
+            exam_name=req.exam_name,
+            score=str(item.score).strip()
+        )
+        db.add(new_score)
+    db.commit()
+    return {"status": "success"}
+
 @app.get("/api/grades/recent", response_model=List[schemas.ExamScoreResponse])
 def get_recent_grades(db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
     records = db.query(models.ExamScore, Student.name)\
@@ -797,5 +825,95 @@ def get_recent_grades(db: Session = Depends(get_db), token: str = Depends(verify
             "exam_name": sc.exam_name,
             "score": sc.score,
             "date": tw_time
+        })
+    return result
+
+@app.post("/api/timetable/import")
+async def import_timetable(file: UploadFile = File(...), db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
+    content = await file.read()
+    try:
+        # Read all sheets
+        sheets = pd.read_excel(io.BytesIO(content), sheet_name=None, dtype=str)
+        db.query(models.TimetableItem).delete() # Clear old timetable completely
+        
+        for sheet_name, df in sheets.items():
+            df = df.where(pd.notnull(df), None)
+            time_col = df.columns[0]
+            days_cols = df.columns[1:]
+            
+            for index, row in df.iterrows():
+                time_slot = str(row[time_col]).strip() if row[time_col] else None
+                if not time_slot or time_slot == "nan" or time_slot == "None":
+                    continue
+                    
+                for day in days_cols:
+                    subject = str(row[day]).strip() if row[day] else None
+                    if subject and subject not in ["nan", "None", ""]:
+                        item = models.TimetableItem(
+                            group_name=sheet_name,
+                            time_slot=time_slot,
+                            day_of_week=str(day).strip(),
+                            subject=subject
+                        )
+                        db.add(item)
+        db.commit()
+        return {"status": "success"}
+    except Exception as e:
+        logger.error(f"Error importing timetable: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/timetable/export")
+def export_timetable(db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
+    items = db.query(models.TimetableItem).all()
+    
+    # Group items by group_name
+    groups = {}
+    for item in items:
+        groups.setdefault(item.group_name, []).append(item)
+        
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        if not groups:
+            # Empty timetable
+            pd.DataFrame().to_excel(writer, sheet_name="無課表")
+        else:
+            for gname, gitems in groups.items():
+                # We need to construct a DataFrame.
+                # First, find all unique time slots and sort them.
+                # Usually we just sort them alphabetically, or assume HH:MM:SS format.
+                time_slots = sorted(list(set([x.time_slot for x in gitems])))
+                days = ["日", "一", "二", "三", "四", "五", "六"]
+                
+                rows = []
+                for ts in time_slots:
+                    row = {gname: ts}
+                    for d in days:
+                        # Find subject
+                        subj = next((x.subject for x in gitems if x.time_slot == ts and x.day_of_week == d), "")
+                        row[d] = subj
+                    rows.append(row)
+                    
+                df = pd.DataFrame(rows)
+                df.to_excel(writer, index=False, sheet_name=gname)
+                
+    output.seek(0)
+    encoded_file_name = quote("課表.xlsx")
+    headers = {
+        'Content-Disposition': f"attachment; filename*=utf-8''{encoded_file_name}"
+    }
+    return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+@app.get("/api/timetable")
+def get_timetable(db: Session = Depends(get_db)):
+    # Public endpoint for swipe.html
+    items = db.query(models.TimetableItem).all()
+    result = {}
+    for item in items:
+        if item.group_name not in result:
+            result[item.group_name] = []
+        result[item.group_name].append({
+            "time_slot": item.time_slot,
+            "day_of_week": item.day_of_week,
+            "subject": item.subject
         })
     return result

@@ -51,3 +51,11 @@ class ExamScoreResponse(BaseModel):
     
     class Config:
         orm_mode = True
+
+class StudentScoreInput(BaseModel):
+    student_id: int
+    score: str
+
+class ExamScoreBulkCreate(BaseModel):
+    exam_name: str
+    scores: List[StudentScoreInput]

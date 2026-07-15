@@ -168,6 +168,18 @@
             filter: grayscale(100%);
         }
 
+        button.btn-success {
+            background-color: rgba(74, 222, 128, 0.15);
+            color: var(--success);
+            border-color: rgba(74, 222, 128, 0.4);
+        }
+        
+        button.btn-success:hover:not(:disabled) {
+            background-color: rgba(74, 222, 128, 0.25);
+            border-color: var(--success);
+            box-shadow: 0 10px 20px -10px var(--success);
+        }
+
         .status-message {
             margin-top: 16px;
             padding: 12px;
@@ -241,24 +253,30 @@
         
         <!-- Input Section -->
         <div class="card">
-            <h1>📝 登錄學生成績</h1>
-            <p class="subtitle">輸入成績或狀態（如：缺考），家長即可在 LINE 即時查詢</p>
+            <h1>📝 批次登錄學生成績</h1>
+            <p class="subtitle">請先輸入本次考試名稱，接著直接在表格中填寫分數（未填寫的學生不會送出）</p>
             
             <div class="form-group">
-                <label>選擇學生：</label>
-                <select id="studentSelect">
-                    <option value="">載入中...</option>
-                </select>
-            </div>
-            <div class="form-group">
                 <label>考試名稱 (如：國一上第一次段考 數學)：</label>
-                <input type="text" id="examName" placeholder="請輸入考試名稱">
+                <input type="text" id="examName" placeholder="請輸入考試名稱" style="font-size:18px; font-weight:bold; color:var(--primary);">
             </div>
-            <div class="form-group">
-                <label>成績 / 狀態 (如：95 或 缺考)：</label>
-                <input type="text" id="score" placeholder="請輸入分數">
+            
+            <div style="overflow-x: auto; max-height: 400px; margin-bottom: 20px;">
+                <table id="bulkInputTable" style="margin-top: 0;">
+                    <thead>
+                        <tr>
+                            <th style="position: sticky; top: 0; background: var(--bg-dark); z-index: 2;">學號</th>
+                            <th style="position: sticky; top: 0; background: var(--bg-dark); z-index: 2;">學生姓名</th>
+                            <th style="position: sticky; top: 0; background: var(--bg-dark); z-index: 2;">成績 / 狀態 (可填"缺考")</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data inserted here -->
+                    </tbody>
+                </table>
             </div>
-            <button id="submitBtn">儲存成績</button>
+
+            <button id="submitBtn" class="btn-success">批次儲存成績</button>
             <div id="submitStatus" class="status-message"></div>
         </div>
 
@@ -295,9 +313,8 @@
     const loginBtn = document.getElementById('loginBtn');
     const loginStatus = document.getElementById('loginStatus');
 
-    const studentSelect = document.getElementById('studentSelect');
     const examName = document.getElementById('examName');
-    const score = document.getElementById('score');
+    const bulkInputTableBody = document.querySelector('#bulkInputTable tbody');
     const submitBtn = document.getElementById('submitBtn');
     const submitStatus = document.getElementById('submitStatus');
     const historyTableBody = document.querySelector('#historyTable tbody');
@@ -344,45 +361,84 @@
     }
 
     function populateStudents(students) {
-        studentSelect.innerHTML = '<option value="">-- 請選擇學生 --</option>';
+        bulkInputTableBody.innerHTML = '';
+        if (students.length === 0) {
+            bulkInputTableBody.innerHTML = '<tr><td colspan="3" style="text-align:center;">尚未建立學生資料</td></tr>';
+            return;
+        }
         students.forEach(s => {
-            const opt = document.createElement('option');
-            opt.value = s.id;
-            opt.textContent = `${s.student_number} - ${s.name}`;
-            studentSelect.appendChild(opt);
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="color:var(--text-muted);">${s.student_number}</td>
+                <td style="font-weight:600;">${s.name}</td>
+                <td>
+                    <input type="text" class="score-input" data-studentid="${s.id}" placeholder="輸入分數..." style="padding:8px; font-size:14px; width: 100%; box-sizing: border-box;">
+                </td>
+            `;
+            bulkInputTableBody.appendChild(tr);
+        });
+        
+        // Arrow key navigation for Excel-like feel
+        const inputs = Array.from(document.querySelectorAll('.score-input'));
+        inputs.forEach((input, index) => {
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowDown' || e.key === 'Enter') {
+                    e.preventDefault();
+                    if (index + 1 < inputs.length) inputs[index + 1].focus();
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (index - 1 >= 0) inputs[index - 1].focus();
+                }
+            });
         });
     }
 
     submitBtn.addEventListener('click', async () => {
-        const studentId = studentSelect.value;
         const eName = examName.value.trim();
-        const eScore = score.value.trim();
+        if (!eName) {
+            showStatus(submitStatus, '請先填寫「考試名稱」！', true);
+            examName.focus();
+            return;
+        }
 
-        if (!studentId || !eName || !eScore) {
-            showStatus(submitStatus, '請完整填寫所有欄位！', true);
+        const inputs = Array.from(document.querySelectorAll('.score-input'));
+        const scores = [];
+        inputs.forEach(input => {
+            const val = input.value.trim();
+            if (val) {
+                scores.push({
+                    student_id: parseInt(input.dataset.studentid),
+                    score: val
+                });
+            }
+        });
+
+        if (scores.length === 0) {
+            showStatus(submitStatus, '您沒有填寫任何成績！請在表格內填寫分數。', true);
             return;
         }
 
         submitBtn.disabled = true;
         try {
-            const res = await fetch('/api/grades', {
+            const res = await fetch('/api/grades/bulk', {
                 method: 'POST',
                 headers: { 
                     'Authorization': `Bearer ${currentToken}`,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    student_id: parseInt(studentId),
                     exam_name: eName,
-                    score: eScore
+                    scores: scores
                 })
             });
 
             if (!res.ok) throw new Error("儲存失敗");
             
-            showStatus(submitStatus, '✅ 成績登錄成功！', false);
-            score.value = ''; // Clear score, keep exam name for rapid entry
-            examName.focus();
+            showStatus(submitStatus, `✅ 批次儲存成功！共紀錄了 ${scores.length} 筆成績。`, false);
+            
+            // Clear inputs
+            inputs.forEach(input => input.value = '');
+            
             loadHistory();
         } catch (e) {
             showStatus(submitStatus, '❌ ' + e.message, true);
