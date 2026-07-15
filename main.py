@@ -801,11 +801,11 @@ def export_timetable(db: Session = Depends(get_db), token: str = Depends(verify_
                 
                 # Merge and sort
                 time_slots = sorted(list(set(fixed_time_slots + db_time_slots)))
-                days = ["一", "二", "三", "四", "五", "六", "日"]
+                days = ["日", "一", "二", "三", "四", "五", "六"]
                 
                 rows = []
                 for ts in time_slots:
-                    row = {"時間": ts}
+                    row = {gname: ts}
                     for d in days:
                         # Find subject
                         subj = next((x.subject for x in gitems if x.time_slot == ts and x.day_of_week == d), "")
