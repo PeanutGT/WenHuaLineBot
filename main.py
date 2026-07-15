@@ -172,6 +172,9 @@ def sync_excel_to_db_from_file(file_content: bytes):
         db = SessionLocal()
         df = pd.read_excel(io.BytesIO(file_content), dtype=str)
         
+        # Normalize column names to strip any accidental spaces
+        df.columns = [str(c).strip() for c in df.columns]
+        
         # Replace NaN with None
         df = df.where(pd.notnull(df), None)
         
@@ -241,8 +244,14 @@ def sync_excel_to_db_from_file(file_content: bytes):
                 if student.name != student_name: student.name = student_name; updated = True
                 if student.parent_id != parent.id: student.parent_id = parent.id; updated = True
                 if student.card_number != card_number: student.card_number = card_number; updated = True
-                if student.class_name != class_name: student.class_name = class_name; updated = True
-                if student.enrolled_subjects != enrolled_subjects: student.enrolled_subjects = enrolled_subjects; updated = True
+                
+                # Only update class and subjects if they are explicitly provided in the file (not empty)
+                if class_name is not None and student.class_name != class_name: 
+                    student.class_name = class_name
+                    updated = True
+                if enrolled_subjects is not None and student.enrolled_subjects != enrolled_subjects: 
+                    student.enrolled_subjects = enrolled_subjects
+                    updated = True
                 
                 if updated:
                     db.commit()
