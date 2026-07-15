@@ -256,6 +256,21 @@
             <h1>📝 批次登錄學生成績</h1>
             <p class="subtitle">請先輸入本次考試名稱，接著直接在表格中填寫分數（未填寫的學生不會送出）</p>
             
+            <div class="form-group" style="display: flex; gap: 12px; margin-bottom: 16px;">
+                <div style="flex: 1;">
+                    <label>篩選班級：</label>
+                    <select id="classFilter" style="width: 100%; padding: 12px; border-radius: 8px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); color: white;">
+                        <option value="">-- 全部班級 --</option>
+                    </select>
+                </div>
+                <div style="flex: 1;">
+                    <label>篩選科目：</label>
+                    <select id="subjectFilter" style="width: 100%; padding: 12px; border-radius: 8px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); color: white;">
+                        <option value="">-- 全部科目 --</option>
+                    </select>
+                </div>
+            </div>
+            
             <div class="form-group">
                 <label>考試名稱 (如：國一上第一次段考 數學)：</label>
                 <input type="text" id="examName" placeholder="請輸入考試名稱" style="font-size:18px; font-weight:bold; color:var(--primary);">
@@ -314,10 +329,14 @@
     const loginStatus = document.getElementById('loginStatus');
 
     const examName = document.getElementById('examName');
+    const classFilter = document.getElementById('classFilter');
+    const subjectFilter = document.getElementById('subjectFilter');
     const bulkInputTableBody = document.querySelector('#bulkInputTable tbody');
     const submitBtn = document.getElementById('submitBtn');
     const submitStatus = document.getElementById('submitStatus');
     const historyTableBody = document.querySelector('#historyTable tbody');
+    
+    let allStudents = [];
 
     function showStatus(element, message, isError = false) {
         element.textContent = message;
@@ -349,15 +368,65 @@
             const students = await res.json();
             currentToken = token;
             sessionStorage.setItem('ADMIN_TOKEN', token);
+            allStudents = students;
             
             loginSection.classList.add('hidden');
             dashboardSection.classList.remove('hidden');
             
-            populateStudents(students);
+            populateFilters();
+            filterAndRenderStudents();
             loadHistory();
         } catch (e) {
             showStatus(loginStatus, '❌ 驗證失敗：' + e.message, true);
         }
+    }
+
+    function populateFilters() {
+        const classes = new Set();
+        const subjects = new Set();
+        
+        allStudents.forEach(s => {
+            if (s.class_name) classes.add(s.class_name);
+            if (s.enrolled_subjects) {
+                s.enrolled_subjects.split(',').forEach(sub => {
+                    if (sub.trim()) subjects.add(sub.trim());
+                });
+            }
+        });
+        
+        classes.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c; opt.textContent = c;
+            classFilter.appendChild(opt);
+        });
+        
+        subjects.forEach(sub => {
+            const opt = document.createElement('option');
+            opt.value = sub; opt.textContent = sub;
+            subjectFilter.appendChild(opt);
+        });
+    }
+
+    classFilter.addEventListener('change', filterAndRenderStudents);
+    subjectFilter.addEventListener('change', filterAndRenderStudents);
+
+    function filterAndRenderStudents() {
+        const selClass = classFilter.value;
+        const selSubj = subjectFilter.value;
+        
+        let filtered = allStudents;
+        if (selClass) {
+            filtered = filtered.filter(s => s.class_name === selClass);
+        }
+        if (selSubj) {
+            filtered = filtered.filter(s => {
+                if (!s.enrolled_subjects) return false;
+                const subs = s.enrolled_subjects.split(',').map(x => x.trim());
+                return subs.includes(selSubj);
+            });
+        }
+        
+        populateStudents(filtered);
     }
 
     function populateStudents(students) {
@@ -428,6 +497,7 @@
                 },
                 body: JSON.stringify({
                     exam_name: eName,
+                    subject: subjectFilter.value || null,
                     scores: scores
                 })
             });

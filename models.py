@@ -28,6 +28,8 @@ class Student(Base):
     # Foreign Key linking to Parent
     parent_id = Column(Integer, ForeignKey("parents.id"))
     group_id = Column(Integer, ForeignKey("groups.id"), nullable=True)
+    class_name = Column(String, nullable=True)
+    enrolled_subjects = Column(String, nullable=True)
     
     parent = relationship("Parent", back_populates="students")
     group = relationship("Group", back_populates="students")
@@ -85,6 +87,7 @@ class ExamScore(Base):
     id = Column(Integer, primary_key=True, index=True)
     student_id = Column(Integer, ForeignKey("students.id"))
     exam_name = Column(String, nullable=False)
+    subject = Column(String, nullable=True)
     score = Column(String, nullable=False)
     date = Column(DateTime, default=datetime.datetime.utcnow)
     

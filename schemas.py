@@ -39,6 +39,7 @@ class GroupResponse(BaseModel):
 class ExamScoreCreate(BaseModel):
     student_id: int
     exam_name: str
+    subject: Optional[str] = None
     score: str
 
 class ExamScoreResponse(BaseModel):
@@ -46,6 +47,7 @@ class ExamScoreResponse(BaseModel):
     student_id: int
     student_name: str
     exam_name: str
+    subject: Optional[str] = None
     score: str
     date: str
     
@@ -58,4 +60,5 @@ class StudentScoreInput(BaseModel):
 
 class ExamScoreBulkCreate(BaseModel):
     exam_name: str
+    subject: Optional[str] = None
     scores: List[StudentScoreInput]

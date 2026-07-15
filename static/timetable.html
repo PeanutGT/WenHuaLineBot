@@ -515,7 +515,8 @@
         html += '</tr></thead><tbody>';
 
         timeSlots.forEach(ts => {
-            html += `<tr><td class="time-col">${ts}</td>`;
+            const displayTs = ts.replace(/(\d{1,2}:\d{2}):00(?!\d)/g, '$1');
+            html += `<tr><td class="time-col">${displayTs}</td>`;
             days.forEach((day, idx) => {
                 const isToday = (idx === todayIdx);
                 const subjItem = items.find(i => i.time_slot === ts && i.day_of_week === day);

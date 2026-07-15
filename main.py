@@ -209,18 +209,21 @@ def sync_excel_to_db_from_file(file_content: bytes):
                     parent.name = parent_name
                     db.commit()
                     
-            # Handle Group mapping
-            group_name = str(row.get('班級')).strip() if '班級' in row and row.get('班級') else None
-            group_id = None
-            if group_name:
-                group = db.query(models.Group).filter(models.Group.name == group_name).first()
-                if group:
-                    group_id = group.id
+            # Class and Subject mapping
+            class_name = str(row.get('班級')).strip() if '班級' in row and row.get('班級') and str(row.get('班級')) != 'nan' else None
+            enrolled_subjects = str(row.get('科目')).strip() if '科目' in row and row.get('科目') and str(row.get('科目')) != 'nan' else None
                 
             # 確保學生存在並更新資料
             student = db.query(Student).filter(Student.student_number == student_number).first()
             if not student:
-                student = Student(name=student_name, student_number=student_number, card_number=card_number, parent_id=parent.id, group_id=group_id)
+                student = Student(
+                    name=student_name, 
+                    student_number=student_number, 
+                    card_number=card_number, 
+                    parent_id=parent.id, 
+                    class_name=class_name,
+                    enrolled_subjects=enrolled_subjects
+                )
                 db.add(student)
                 students_updated += 1
             else:
@@ -228,7 +231,8 @@ def sync_excel_to_db_from_file(file_content: bytes):
                 if student.name != student_name: student.name = student_name; updated = True
                 if student.parent_id != parent.id: student.parent_id = parent.id; updated = True
                 if student.card_number != card_number: student.card_number = card_number; updated = True
-                if student.group_id != group_id: student.group_id = group_id; updated = True
+                if student.class_name != class_name: student.class_name = class_name; updated = True
+                if student.enrolled_subjects != enrolled_subjects: student.enrolled_subjects = enrolled_subjects; updated = True
                 
                 if updated:
                     db.commit()
@@ -244,7 +248,26 @@ def sync_excel_to_db_from_file(file_content: bytes):
 
 @app.on_event("startup")
 def startup_event():
-    logger.info("Startup complete. Cron scheduling is now externalized.")
+    logger.info("Startup complete. Executing DB migration...")
+    db = SessionLocal()
+    from sqlalchemy import text
+    try:
+        db.execute(text("ALTER TABLE students ADD COLUMN class_name VARCHAR"))
+        logger.info("Added class_name to students")
+    except Exception as e:
+        logger.info(f"Skipped class_name: {e}")
+    try:
+        db.execute(text("ALTER TABLE students ADD COLUMN enrolled_subjects VARCHAR"))
+        logger.info("Added enrolled_subjects to students")
+    except Exception as e:
+        logger.info(f"Skipped enrolled_subjects: {e}")
+    try:
+        db.execute(text("ALTER TABLE exam_scores ADD COLUMN subject VARCHAR"))
+        logger.info("Added subject to exam_scores")
+    except Exception as e:
+        logger.info(f"Skipped subject: {e}")
+    db.commit()
+    db.close()
 
 @app.post("/api/cron/check_missing_departure")
 def check_missing_departure(db: Session = Depends(get_db), token: str = Depends(verify_cron_token)):
@@ -777,7 +800,44 @@ def api_export_attendance(db: Session = Depends(get_db), token: str = Depends(ve
 @app.get("/api/students")
 def get_students(db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
     students = db.query(Student).order_by(Student.student_number).all()
-    return [{"id": s.id, "name": s.name, "student_number": s.student_number} for s in students]
+    return [{
+        "id": s.id, 
+        "name": s.name, 
+        "student_number": s.student_number,
+        "class_name": s.class_name,
+        "enrolled_subjects": s.enrolled_subjects
+    } for s in students]
+
+@app.get("/api/students/export")
+def api_export_students(db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
+    students = db.query(Student, Parent).join(Parent, Student.parent_id == Parent.id).order_by(Student.student_number).all()
+    
+    data = []
+    for s, p in students:
+        data.append({
+            "學號": s.student_number,
+            "姓名": s.name,
+            "卡號": s.card_number,
+            "家長姓名": p.name,
+            "聯絡電話": p.phone_number,
+            "班級": s.class_name,
+            "科目": s.enrolled_subjects
+        })
+        
+    df = pd.DataFrame(data)
+    date_str = get_tw_now().strftime('%Y-%m-%d')
+    file_name = f"{date_str}_學生名單.xlsx"
+    
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='學生名單')
+    
+    output.seek(0)
+    encoded_file_name = quote(file_name)
+    headers = {
+        'Content-Disposition': f"attachment; filename*=utf-8''{encoded_file_name}"
+    }
+    return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 @app.post("/api/grades")
 def create_grade(req: schemas.ExamScoreCreate, db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
@@ -788,6 +848,7 @@ def create_grade(req: schemas.ExamScoreCreate, db: Session = Depends(get_db), to
     new_score = models.ExamScore(
         student_id=req.student_id,
         exam_name=req.exam_name,
+        subject=req.subject,
         score=req.score
     )
     db.add(new_score)
@@ -802,6 +863,7 @@ def create_grades_bulk(req: schemas.ExamScoreBulkCreate, db: Session = Depends(g
         new_score = models.ExamScore(
             student_id=item.student_id,
             exam_name=req.exam_name,
+            subject=req.subject,
             score=str(item.score).strip()
         )
         db.add(new_score)
@@ -823,6 +885,7 @@ def get_recent_grades(db: Session = Depends(get_db), token: str = Depends(verify
             "student_id": sc.student_id,
             "student_name": s_name,
             "exam_name": sc.exam_name,
+            "subject": sc.subject,
             "score": sc.score,
             "date": tw_time
         })
@@ -845,6 +908,10 @@ async def import_timetable(file: UploadFile = File(...), db: Session = Depends(g
                 time_slot = str(row[time_col]).strip() if row[time_col] else None
                 if not time_slot or time_slot == "nan" or time_slot == "None":
                     continue
+                
+                # Remove seconds formatting (HH:MM:SS -> HH:MM)
+                import re
+                time_slot = re.sub(r'(\d{1,2}:\d{2}):00(?!\d)', r'\1', time_slot)
                     
                 for day in days_cols:
                     subject = str(row[day]).strip() if row[day] else None
@@ -881,7 +948,12 @@ def export_timetable(db: Session = Depends(get_db), token: str = Depends(verify_
                 # We need to construct a DataFrame.
                 # First, find all unique time slots and sort them.
                 # Usually we just sort them alphabetically, or assume HH:MM:SS format.
-                time_slots = sorted(list(set([x.time_slot for x in gitems])))
+                # Generate default time slots from 12:00 to 22:00
+                fixed_time_slots = [f"{str(h).zfill(2)}:00" for h in range(12, 23)]
+                db_time_slots = [x.time_slot for x in gitems]
+                
+                # Merge and sort
+                time_slots = sorted(list(set(fixed_time_slots + db_time_slots)))
                 days = ["日", "一", "二", "三", "四", "五", "六"]
                 
                 rows = []

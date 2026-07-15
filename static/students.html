@@ -155,6 +155,18 @@
             filter: grayscale(100%);
         }
 
+        button.btn-success {
+            background-color: rgba(74, 222, 128, 0.15);
+            color: var(--success);
+            border-color: rgba(74, 222, 128, 0.4);
+        }
+        
+        button.btn-success:hover:not(:disabled) {
+            background-color: rgba(74, 222, 128, 0.25);
+            border-color: var(--success);
+            box-shadow: 0 10px 20px -10px var(--success);
+        }
+
         .status-message {
             margin-top: 16px;
             padding: 12px;
@@ -248,27 +260,38 @@
     <!-- Dashboard Section -->
     <div id="dashboardSection" class="hidden">
         
+        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+            <!-- Upload Section -->
+            <div class="card" style="flex: 1; min-width: 300px; margin-bottom: 0;">
+                <h1>📥 匯入學生名單</h1>
+                <p class="subtitle">請上傳包含「學號、姓名、卡號、電話、班級、科目」的 Excel<br>若學號存在會自動覆蓋</p>
+                <div class="form-group">
+                    <input type="file" id="excelFile" accept=".xlsx, .xls">
+                </div>
+                <button id="uploadBtn">
+                    <span class="loader" id="uploadLoader"></span> 覆蓋並上傳名單
+                </button>
+                <div id="uploadStatus" class="status-message"></div>
+            </div>
+
+            <!-- Export Section -->
+            <div class="card" style="flex: 1; min-width: 300px; margin-bottom: 0;">
+                <h1>📤 匯出學生名單</h1>
+                <p class="subtitle">下載目前雲端庫中所有的學生資料<br>（包含家長聯絡方式、班級、科目）</p>
+                <button id="exportBtn" class="btn-success" style="margin-top: 10px;">
+                    下載 Excel 報表
+                </button>
+                <div id="exportStatus" class="status-message"></div>
+            </div>
+        </div>
+
         <!-- Preview Section -->
-        <div class="card">
+        <div class="card" style="margin-top: 20px;">
             <h1>👀 目前雲端學生名單</h1>
             <p class="subtitle" id="studentCount">載入中...</p>
             <div id="studentContent" style="max-height: 400px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
                 <p style="color:#94a3b8; text-align:center; padding: 20px;">請先登入...</p>
             </div>
-        </div>
-
-        <!-- Upload Section -->
-        <div class="card">
-            <h1>📥 匯入學生名單</h1>
-            <p class="subtitle">請上傳包含「學號、姓名、卡號、簡訊電話1/媽媽手機/爸爸手機」的 Excel 檔案<br>如果上傳的學號已存在，資料會被自動更新覆蓋！</p>
-            
-            <div class="form-group">
-                <input type="file" id="excelFile" accept=".xlsx, .xls">
-            </div>
-            <button id="uploadBtn">
-                <span class="loader" id="uploadLoader"></span> 覆蓋並上傳最新名單
-            </button>
-            <div id="uploadStatus" class="status-message"></div>
         </div>
 
     </div>
@@ -287,6 +310,8 @@
     const excelFile = document.getElementById('excelFile');
     const uploadLoader = document.getElementById('uploadLoader');
     const uploadStatus = document.getElementById('uploadStatus');
+    const exportBtn = document.getElementById('exportBtn');
+    const exportStatus = document.getElementById('exportStatus');
     const studentContent = document.getElementById('studentContent');
     const studentCount = document.getElementById('studentCount');
 
@@ -366,6 +391,44 @@
         }
     });
 
+    exportBtn.addEventListener('click', async () => {
+        exportBtn.disabled = true;
+        exportStatus.className = 'status-message';
+        try {
+            const response = await fetch('/api/students/export', {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${currentToken}` }
+            });
+            if (!response.ok) throw new Error('下載失敗');
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            
+            const disposition = response.headers.get('Content-Disposition');
+            let filename = '學生名單.xlsx';
+            if (disposition) {
+                const utf8Regex = /filename\*=utf-8''([^;\n]*)/i;
+                const matchesUtf8 = utf8Regex.exec(disposition);
+                if (matchesUtf8 != null && matchesUtf8[1]) {
+                    filename = decodeURIComponent(matchesUtf8[1]);
+                }
+            }
+            
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            showStatus(exportStatus, '✅ 下載成功！', false);
+        } catch (error) {
+            showStatus(exportStatus, '❌ ' + error.message, true);
+        } finally {
+            exportBtn.disabled = false;
+        }
+    });
+
     async function fetchStudents() {
         try {
             studentContent.innerHTML = '<p style="text-align:center; padding: 20px; color:#94a3b8;">載入中...</p>';
@@ -381,11 +444,13 @@
                     return;
                 }
                 
-                let html = '<table class="st-table"><thead><tr><th>學號</th><th>姓名</th></tr></thead><tbody>';
+                let html = '<table class="st-table"><thead><tr><th>學號</th><th>姓名</th><th>班級</th><th>上課科目</th></tr></thead><tbody>';
                 students.forEach(s => {
                     html += `<tr>
                         <td style="font-family: monospace; color: #94a3b8;">${s.student_number}</td>
                         <td style="font-weight: 600;">${s.name}</td>
+                        <td style="color: #94a3b8;">${s.class_name || ''}</td>
+                        <td style="color: #94a3b8;">${s.enrolled_subjects || ''}</td>
                     </tr>`;
                 });
                 html += '</tbody></table>';
