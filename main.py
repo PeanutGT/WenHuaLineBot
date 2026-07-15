@@ -4,6 +4,7 @@ import logging
 import io
 import secrets
 import re
+from urllib.parse import quote
 from typing import List
 from fastapi import FastAPI, Request, HTTPException, Depends, Header, status, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -698,7 +699,8 @@ def api_export_attendance(db: Session = Depends(get_db), token: str = Depends(ve
         df.to_excel(writer, index=False, sheet_name='出勤紀錄')
     
     output.seek(0)
+    encoded_file_name = quote(file_name)
     headers = {
-        'Content-Disposition': f'attachment; filename="{file_name}"'
+        'Content-Disposition': f"attachment; filename*=utf-8''{encoded_file_name}"
     }
     return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')

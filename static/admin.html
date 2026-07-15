@@ -436,11 +436,17 @@
             
             const disposition = response.headers.get('Content-Disposition');
             let filename = '出勤紀錄.xlsx';
-            if (disposition && disposition.indexOf('filename=') !== -1) {
-                const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
-                const matches = filenameRegex.exec(disposition);
-                if (matches != null && matches[1]) { 
-                    filename = matches[1].replace(/['"]/g, '');
+            if (disposition) {
+                const utf8Regex = /filename\*=utf-8''([^;\n]*)/i;
+                const matchesUtf8 = utf8Regex.exec(disposition);
+                if (matchesUtf8 != null && matchesUtf8[1]) {
+                    filename = decodeURIComponent(matchesUtf8[1]);
+                } else {
+                    const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                    const matches = filenameRegex.exec(disposition);
+                    if (matches != null && matches[1]) { 
+                        filename = matches[1].replace(/['"]/g, '');
+                    }
                 }
             }
             
