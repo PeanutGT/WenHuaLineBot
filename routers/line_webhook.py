@@ -152,6 +152,19 @@ def handle_message(event):
                 logger.error(f"Error querying grades: {e}", exc_info=True)
             finally:
                 db.close()
+        elif text == "綁定身分":
+            reply_text = (
+                "【智慧親師通 - 系統提示】\n"
+                "為啟用即時出勤通知，請按左下角小鍵盤圖示，並輸入以下格式進行綁定：\n\n"
+                "綁定 學生姓名 手機號碼\n\n"
+                "範例：綁定 王小明 0912345678"
+            )
+            line_bot_api.reply_message(
+                ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text=reply_text)]
+                )
+            )
         elif text.startswith("綁定 "):
             parts = text.split()
             db = SessionLocal()

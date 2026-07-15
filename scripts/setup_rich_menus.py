@@ -98,7 +98,7 @@ def create_and_set_rich_menu():
             areas=[
                 RichMenuArea(
                     bounds=RichMenuBounds(x=0, y=0, width=833, height=1686),
-                    action=URIAction(type="uri", uri=liff_url)
+                    action=MessageAction(type="message", text="綁定身分")
                 ),
                 RichMenuArea(
                     bounds=RichMenuBounds(x=833, y=0, width=833, height=1686),
