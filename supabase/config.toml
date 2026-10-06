@@ -1,0 +1,14 @@
+# A simple Supabase configuration file to identify this folder as a Supabase project
+project_id = "your-supabase-project-id"
+
+[api]
+port = 54321
+
+[db]
+port = 54322
+
+[studio]
+port = 54323
+
+[inbucket]
+port = 54324
