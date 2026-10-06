@@ -121,28 +121,6 @@ app.include_router(timetable.router, prefix="/api/timetable")
 
 from services.excel_service import clean_phone, clean_card_number, sync_excel_to_db_from_file
 
-@app.on_event("startup")
-def startup_event():
-    logger.info("Startup complete. Executing DB migration...")
-    db = SessionLocal()
-    from sqlalchemy import text
-    try:
-        db.execute(text("ALTER TABLE students ADD COLUMN class_name VARCHAR"))
-        logger.info("Added class_name to students")
-    except Exception as e:
-        logger.info(f"Skipped class_name: {e}")
-    try:
-        db.execute(text("ALTER TABLE students ADD COLUMN enrolled_subjects VARCHAR"))
-        logger.info("Added enrolled_subjects to students")
-    except Exception as e:
-        logger.info(f"Skipped enrolled_subjects: {e}")
-    try:
-        db.execute(text("ALTER TABLE exam_scores ADD COLUMN subject VARCHAR"))
-        logger.info("Added subject to exam_scores")
-    except Exception as e:
-        logger.info(f"Skipped subject: {e}")
-    db.commit()
-    db.close()
 
 @app.post("/api/cron/check_missing_departure")
 def check_missing_departure(db: Session = Depends(get_db), token: str = Depends(verify_cron_token)):
