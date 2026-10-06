@@ -114,6 +114,8 @@ app.mount("/static", StaticFiles(directory=os.path.join(static_dir, "static")), 
 
 # Include Routers
 app.include_router(webhook_router)
+from routers import grades
+app.include_router(grades.router, prefix="/api/grades", dependencies=[Depends(verify_admin_token)])
 
 from services.excel_service import clean_phone, clean_card_number, sync_excel_to_db_from_file
 
@@ -555,130 +557,6 @@ def api_export_students(db: Session = Depends(get_db), token: str = Depends(veri
         'Content-Disposition': f"attachment; filename*=utf-8''{encoded_file_name}"
     }
     return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-
-@app.post("/api/grades")
-def create_grade(req: schemas.ExamScoreCreate, db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
-    student = db.query(Student).filter(Student.id == req.student_id).first()
-    if not student:
-        raise HTTPException(status_code=404, detail="Student not found")
-        
-    new_score = models.ExamScore(
-        student_id=req.student_id,
-        exam_name=req.exam_name,
-        subject=req.subject,
-        score=req.score
-    )
-    db.add(new_score)
-    db.commit()
-    return {"status": "success"}
-
-@app.post("/api/grades/bulk")
-def create_grades_bulk(req: schemas.ExamScoreBulkCreate, db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
-    for item in req.scores:
-        if not item.score or str(item.score).strip() == "":
-            continue
-        new_score = models.ExamScore(
-            student_id=item.student_id,
-            exam_name=req.exam_name,
-            subject=req.subject,
-            score=str(item.score).strip()
-        )
-        db.add(new_score)
-    db.commit()
-    return {"status": "success"}
-
-@app.get("/api/grades/recent", response_model=List[schemas.ExamScoreResponse])
-def get_recent_grades(db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
-    records = db.query(models.ExamScore, Student.name)\
-        .join(Student, models.ExamScore.student_id == Student.id)\
-        .order_by(models.ExamScore.date.desc())\
-        .limit(50).all()
-        
-    result = []
-    for sc, s_name in records:
-        tw_time = (sc.date + datetime.timedelta(hours=8)).strftime('%Y-%m-%d %H:%M')
-        result.append({
-            "id": sc.id,
-            "student_id": sc.student_id,
-            "student_name": s_name,
-            "exam_name": sc.exam_name,
-            "subject": sc.subject,
-            "score": sc.score,
-            "date": tw_time
-        })
-    return result
-
-@app.put("/api/grades/{score_id}")
-def update_grade(score_id: int, req: schemas.ExamScoreUpdate, db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
-    score_record = db.query(models.ExamScore).filter(models.ExamScore.id == score_id).first()
-    if not score_record:
-        raise HTTPException(status_code=404, detail="Score not found")
-        
-    if req.exam_name is not None:
-        score_record.exam_name = req.exam_name
-    if req.subject is not None:
-        score_record.subject = req.subject
-    if req.score is not None:
-        score_record.score = req.score
-        
-    db.commit()
-    db.refresh(score_record)
-    return {"status": "success", "id": score_record.id}
-
-@app.delete("/api/grades/{score_id}")
-def delete_grade(score_id: int, db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
-    score_record = db.query(models.ExamScore).filter(models.ExamScore.id == score_id).first()
-    if not score_record:
-        raise HTTPException(status_code=404, detail="Score not found")
-        
-    db.delete(score_record)
-    db.commit()
-    return {"status": "success"}
-
-@app.get("/api/grades/export")
-def export_grades(exam_name: Optional[str] = None, db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
-    query = db.query(models.ExamScore, Student.name, Student.student_number).join(Student, models.ExamScore.student_id == Student.id)
-    
-    if exam_name:
-        query = query.filter(models.ExamScore.exam_name == exam_name)
-        
-    records = query.order_by(models.ExamScore.date.asc()).all()
-    
-    data = []
-    for sc, s_name, s_num in records:
-        tw_time = (sc.date + datetime.timedelta(hours=8)).strftime('%Y-%m-%d %H:%M:%S')
-        data.append({
-            "學號": s_num,
-            "姓名": s_name,
-            "考試名稱": sc.exam_name,
-            "科目": sc.subject or "",
-            "成績": sc.score,
-            "登錄時間": tw_time
-        })
-        
-    df = pd.DataFrame(data)
-    date_str = get_tw_now().strftime('%Y-%m-%d')
-    file_name = f"{date_str}_成績紀錄.xlsx"
-    if exam_name:
-        file_name = f"{date_str}_{exam_name}_成績紀錄.xlsx"
-    
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='學生成績')
-        
-        # Adjust column widths
-        worksheet = writer.sheets['學生成績']
-        widths = {'A': 15, 'B': 15, 'C': 25, 'D': 15, 'E': 10, 'F': 25}
-        for col, width in widths.items():
-            worksheet.column_dimensions[col].width = width
-    
-    output.seek(0)
-    encoded_file_name = quote(file_name)
-    headers = {
-        'Content-Disposition': f"attachment; filename*=utf-8''{encoded_file_name}"
-    }
-    return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-
 @app.post("/api/timetable/import")
 async def import_timetable(file: UploadFile = File(...), db: Session = Depends(get_db), token: str = Depends(verify_admin_token)):
     content = await file.read()
